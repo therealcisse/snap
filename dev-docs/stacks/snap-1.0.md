@@ -1,6 +1,6 @@
 ---
 name: snap-1.0
-description: TypeScript implementation of SPEC.md under ts/ passing all 28 acceptance suites via ./verify --lang ts, plus the §11 unit and property tests the YAML harness cannot express
+description: TypeScript implementation of SPEC.md under ts/ passing all 31 acceptance suites via ./verify --lang ts, plus the §11 unit and property tests the YAML harness cannot express
 created: 2026-09-04
 ---
 
@@ -10,12 +10,12 @@ Sections follow the roadmap phases in design `snap-ts-architecture`. Items are i
 
 ## Spec clarifications
 
-- [ ] Sub-replay warnings: state whether warnings from materializing a base tree contribute to the replay warning set (§6.4); add a YAML regression case.
-- [ ] Non-integer JSON numbers: state whether `1.0` / `1e0` in repository JSON is an error (§4.1); add a YAML regression case.
-- [ ] Working-tree entries with invalid tracked-path names (backslash, control characters): state the failure behavior (§2, §10); add a YAML regression case.
-- [ ] Multiple unsupported entries: state which one is reported (§10); add a YAML regression case.
+- [x] Sub-replay warnings: state whether warnings from materializing a base tree contribute to the replay warning set (§6.4); add a YAML regression case.
+- [x] Non-integer JSON numbers: state whether `1.0` / `1e0` in repository JSON is an error (§4.1); add a YAML regression case.
+- [x] Working-tree entries with invalid tracked-path names (backslash, control characters): state the failure behavior (§2, §10); add a YAML regression case.
+- [x] Multiple unsupported entries: state which one is reported (§10); add a YAML regression case.
 - [x] Stale `./capstones/snap/` paths corrected in `ts/AGENTS.md`.
-- [ ] Stale `./capstones/snap/` paths corrected in `README.md`.
+- [x] Stale `./capstones/snap/` paths corrected in `README.md`.
 
 ## Scaffolding
 
