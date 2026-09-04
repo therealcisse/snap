@@ -14,12 +14,21 @@ Sections follow the roadmap phases in design `snap-ts-architecture`. Items are i
 - [ ] Non-integer JSON numbers: state whether `1.0` / `1e0` in repository JSON is an error (§4.1); add a YAML regression case.
 - [ ] Working-tree entries with invalid tracked-path names (backslash, control characters): state the failure behavior (§2, §10); add a YAML regression case.
 - [ ] Multiple unsupported entries: state which one is reported (§10); add a YAML regression case.
-- [ ] Stale `./capstones/snap/` paths corrected in `ts/AGENTS.md` and `README.md`.
+- [x] Stale `./capstones/snap/` paths corrected in `ts/AGENTS.md`.
+- [ ] Stale `./capstones/snap/` paths corrected in `README.md`.
 
 ## Scaffolding
 
-- [ ] `node --test` unit-test script in `ts/package.json` and `ts/test/` directory.
-- [ ] `src/main.ts` delegates to a CLI entry module; `npm run build` passes.
+Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6.0.x).
+
+- [ ] `tsconfig.json` delta: `module: nodenext`, `target: es2024`, `types: ["node"]`, `verbatimModuleSyntax` (replacing `isolatedModules`), `erasableSyntaxOnly`, `allowImportingTsExtensions`, `rewriteRelativeImportExtensions`, `noUncheckedSideEffectImports`, `exactOptionalPropertyTypes`, `noPropertyAccessFromIndexSignature`, `noImplicitReturns`, `noUnusedLocals`, `noUnusedParameters`.
+- [ ] Dev dependencies pinned: `typescript ~6.0.3`, `@types/node ^24`, `eslint ^10`, `@eslint/js`, `typescript-eslint ^8`, `eslint-plugin-import-x ^4`, `prettier ^3.9`, `fast-check ^4`, `simple-git-hooks ^2`; `tsx` retained.
+- [ ] `eslint.config.js` with `strictTypeChecked` + `stylisticTypeChecked`, `projectService`, `switch-exhaustiveness-check`, `require-array-sort-compare { ignoreStringArrays: false }`, `explicit-module-boundary-types`, `consistent-type-imports`; import-x `extensions: always`, `enforce-node-protocol-usage`, `no-duplicates`, `order`.
+- [ ] `eslint.config.js` API bans on `src/**` with messages: `JSON.parse` (override off for `src/core/json.ts`), `process.exit`, global and `globalThis.fetch`, `localeCompare`, `console.log`/`console.error`, `toString('utf8')` probe, `TextDecoder` without `fatal`, `TSEnumDeclaration`; `no-non-null-assertion` and `no-unsafe-assignment` off for `*.test.ts`.
+- [ ] `.prettierrc.json` (printWidth 100, singleQuote, trailingComma all, arrowParens always, endOfLine lf) and `.prettierignore`.
+- [ ] `package.json` scripts: `typecheck`, `lint`, `lint:fix`, `format`, `format:check`, `test` (`node --test`), `test:watch`, `check` (format:check && lint && typecheck && test), `prepare` (`simple-git-hooks`); `simple-git-hooks.pre-commit` runs `cd ts && npm run check`.
+- [ ] Unit tests colocated as `src/**/*.test.ts`; relative imports carry `.ts` extensions so `node --test` and `./snap` run without `tsx`.
+- [ ] `src/main.ts` delegates to `src/cli/main.ts`; `npm run check` passes on the empty skeleton.
 - [ ] Expected-error (exit 1) vs internal-failure (exit 2) error type with single `snap: <detail>` formatting point (§10).
 
 ## Foundations
