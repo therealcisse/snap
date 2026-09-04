@@ -1,0 +1,115 @@
+format: 1
+name: repository JSON rejects integer-valued numbers spelled with a fraction or exponent
+description: >
+  SPEC §4.1. A JSON number is an integer only when its lexeme matches
+  `-?(0|[1-9][0-9]*)`; `1.0` and `1e0` are non-integer numbers even though they
+  parse to the same value as `1`. Each repository below is valid except for one
+  such lexeme, so the error is attributable to the spelling alone; the final
+  repository spells the same values as `1` and validates. A reader that
+  compares parsed values (`JSON.parse` followed by an integer check) accepts
+  the first three repositories and produces different bytes here.
+steps:
+  - run:
+      args: [init, repo]
+      expect: [{type: exit_code, value: 0}]
+
+  # Patch revision spelled with a fraction.
+  - write_file:
+      path: repo/.snap/repository.json
+      text: |
+        {
+          "format": 1,
+          "frontier": [["a@x", 1]],
+          "patches": [
+            {
+              "author": "a@x",
+              "revision": 1.0,
+              "base": [],
+              "message": "fractional revision",
+              "changes": [{"type": "text", "path": "f", "edit": []}]
+            }
+          ]
+        }
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_matches, pattern: '^snap: .+positive safe integer\n$'}
+
+  # Frontier component spelled with an exponent.
+  - write_file:
+      path: repo/.snap/repository.json
+      text: |
+        {
+          "format": 1,
+          "frontier": [["a@x", 1e0]],
+          "patches": [
+            {
+              "author": "a@x",
+              "revision": 1,
+              "base": [],
+              "message": "exponent frontier",
+              "changes": [{"type": "text", "path": "f", "edit": []}]
+            }
+          ]
+        }
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_matches, pattern: '^snap: .+\n$'}
+
+  # Format field spelled with a fraction.
+  - write_file:
+      path: repo/.snap/repository.json
+      text: |
+        {
+          "format": 1.0,
+          "frontier": [["a@x", 1]],
+          "patches": [
+            {
+              "author": "a@x",
+              "revision": 1,
+              "base": [],
+              "message": "fractional format",
+              "changes": [{"type": "text", "path": "f", "edit": []}]
+            }
+          ]
+        }
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_matches, pattern: '^snap: .+\n$'}
+
+  # The same values spelled as integers validate, so the lexeme was the error.
+  - write_file:
+      path: repo/.snap/repository.json
+      text: |
+        {
+          "format": 1,
+          "frontier": [["a@x", 1]],
+          "patches": [
+            {
+              "author": "a@x",
+              "revision": 1,
+              "base": [],
+              "message": "integer lexemes",
+              "changes": [{"type": "text", "path": "f", "edit": []}]
+            }
+          ]
+        }
+  - write_file: {path: repo/f, text: ""}
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "version (a@x->1)\n"}
+        - {type: stderr_equals, value: ""}

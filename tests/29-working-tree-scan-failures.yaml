@@ -1,0 +1,108 @@
+format: 1
+name: working tree scans report invalid paths and choose the least offending entry
+description: >
+  SPEC §2 and §10. A regular file whose relative path is not a valid tracked
+  path fails every scanning command with `snap: invalid working tree path:
+  <path>`, printed verbatim. When several entries offend, the one whose relative
+  path is least in unsigned UTF-8 byte order is reported, across both failure
+  classes and regardless of directory structure: `m-link` (0x6d) beats `z\x`
+  (0x7a), and `a.txt` (0x61 0x2e) beats `a/b` (0x61 0x2f) even though a
+  directory-first walk would visit `a/b` first. An empty directory with an
+  invalid name is ignored like any empty directory. Rejected readings that
+  produce different bytes here: skipping invalid names silently (status would
+  exit 0), reusing the unsupported-entry message, or reporting the first entry
+  of a per-directory walk (`a/b` before `a.txt`).
+steps:
+  - run:
+      args: [init, repo]
+      expect: [{type: exit_code, value: 0}]
+  - run:
+      cwd: repo
+      args: [config, contributor.id, a@x]
+      expect: [{type: exit_code, value: 0}]
+
+  # A backslash makes the name an invalid tracked path (§2).
+  - write_file: {path: "repo/z\\x", text: "backslash\n"}
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_equals, value: "snap: invalid working tree path: z\\x\n"}
+  - run:
+      cwd: repo
+      args: [commit, bad]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_equals, value: "snap: invalid working tree path: z\\x\n"}
+  - run:
+      cwd: repo
+      args: [diff]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_equals, value: "snap: invalid working tree path: z\\x\n"}
+
+  # Least path across classes: the symlink `m-link` sorts before `z\x`.
+  - symlink: {path: repo/m-link, target: missing}
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_equals, value: "snap: unsupported working tree entry: m-link\n"}
+  - remove: {path: repo/m-link}
+  - remove: {path: "repo/z\\x"}
+
+  # An ASCII control character is equally invalid and is printed verbatim.
+  - write_file: {path: "repo/bad\u0001name", text: "control\n"}
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_equals, value: "snap: invalid working tree path: bad\u0001name\n"}
+  - remove: {path: "repo/bad\u0001name"}
+
+  # Byte order beats directory order: `a.txt` (0x2e) sorts before `a/b` (0x2f).
+  - symlink: {path: repo/a/b, target: missing}
+  - fifo: {path: repo/a.txt}
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_equals, value: "snap: unsupported working tree entry: a.txt\n"}
+  - remove: {path: repo/a.txt}
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_equals, value: "snap: unsupported working tree entry: a/b\n"}
+  - remove: {path: repo/a}
+
+  # Directories are only traversed; an empty one is ignored whatever its name.
+  - mkdir: {path: "repo/dir\\empty"}
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "version ()\n"}
+        - {type: stderr_equals, value: ""}
+
+  # No failing scan mutated the repository.
+  - assert:
+      - type: json_equals
+        path: repo/.snap/repository.json
+        value:
+          format: 1
+          frontier: []
+          patches: []

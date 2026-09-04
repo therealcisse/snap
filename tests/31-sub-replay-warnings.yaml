@@ -1,0 +1,102 @@
+format: 1
+name: warnings from materializing a base tree do not join the replay warning set
+description: >
+  SPEC §6.2 and §6.4. Materializing a patch's exact base tree is a sub-replay
+  whose warnings are discarded. History: a@x and z@x concurrently create `n`;
+  z merges a (later-create-wins, `n` becomes a's text) and then edits `n`
+  (patch z2, base (a@x->1,z@x->1)); m@x concurrently creates `n/x`. When m
+  merges z, the top-level replay over ids a@x < m@x < z@x integrates z1
+  (0,0,1), m1 (0,1,0), a1 (1,0,0), z2 (1,0,2): m1 removes `n` (namespace-wins
+  on `n`), a1 removes `n/x` (namespace-wins on `n/x`), and z2's edit applies
+  directly because `n` is identical in its base and in the canonical tree.
+  Materializing z2's base replays z1 then a1 and resolves (n,
+  later-create-wins) internally. Under the rejected reading that warning would
+  be printed first, before `n: namespace-wins`; here only the two namespace
+  warnings appear.
+steps:
+  - run:
+      args: [init, a]
+      expect: [{type: exit_code, value: 0}]
+  - run:
+      cwd: a
+      args: [config, contributor.id, a@x]
+      expect: [{type: exit_code, value: 0}]
+  - write_file: {path: a/n, text: "n\n"}
+  - run:
+      cwd: a
+      args: [commit, a-creates-n]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(a@x->1)\n"}
+
+  - run:
+      args: [init, z]
+      expect: [{type: exit_code, value: 0}]
+  - run:
+      cwd: z
+      args: [config, contributor.id, z@x]
+      expect: [{type: exit_code, value: 0}]
+  - write_file: {path: z/n, text: "zz\n"}
+  - run:
+      cwd: z
+      args: [commit, z-creates-n]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(z@x->1)\n"}
+
+  # Concurrent creates of `n`; a1 integrates after z1 and wins.
+  - run:
+      cwd: z
+      args: [merge, ../a]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(a@x->1,z@x->1)\n"}
+        - {type: stderr_equals, value: "warning: auto-resolved n: later-create-wins\n"}
+  - assert:
+      - {type: file_text_equals, path: z/n, value: "n\n"}
+
+  # z2 is based on the merged version, so its base tree needs a sub-replay.
+  - write_file: {path: z/n, text: "zz2\n"}
+  - run:
+      cwd: z
+      args: [commit, z-edits-n]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(a@x->1,z@x->2)\n"}
+
+  - run:
+      args: [init, m]
+      expect: [{type: exit_code, value: 0}]
+  - run:
+      cwd: m
+      args: [config, contributor.id, m@x]
+      expect: [{type: exit_code, value: 0}]
+  - write_file: {path: m/n/x, text: "x\n"}
+  - run:
+      cwd: m
+      args: [commit, m-creates-n-slash-x]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(m@x->1)\n"}
+
+  # Only the top-level namespace resolutions are reported.
+  - run:
+      cwd: m
+      args: [merge, ../z]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(a@x->1,m@x->1,z@x->2)\n"}
+        - type: stderr_equals
+          value: "warning: auto-resolved n: namespace-wins\nwarning: auto-resolved n/x: namespace-wins\n"
+  - assert:
+      - {type: file_text_equals, path: m/n, value: "zz2\n"}
+      - {type: path_not_exists, path: m/n/x}
+
+  # Re-merging contained history is a no-op with no warnings.
+  - run:
+      cwd: m
+      args: [merge, ../z]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(a@x->1,m@x->1,z@x->2)\n"}
+        - {type: stderr_equals, value: ""}

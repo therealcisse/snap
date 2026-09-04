@@ -62,6 +62,10 @@ its contents.
 - Directories are implicit; empty directories are not tracked.
 - Symlinks and other non-regular filesystem entries are unsupported. Snap MUST
   report them and MUST NOT follow them.
+- A regular file whose relative path is not a valid tracked path (below) is an
+  **invalid working tree path**. Snap MUST report it and MUST NOT track it.
+  Directories are only traversed; an empty directory is ignored whatever its
+  name.
 - Permissions, ownership, timestamps, and extended attributes are not tracked.
 
 A tracked path is a UTF-8 relative path using `/` separators. It MUST be
@@ -187,13 +191,16 @@ Every repository has this interoperable layout:
 
 The example is pretty-printed for readability. Readers accept ordinary JSON
 whitespace and object-key order. Valid input has unique object keys. The parsed
-typed value—not its serialized bytes—is authoritative. Writers SHOULD use
-two-space indentation and a trailing LF so repositories remain pleasant to
-inspect.
+typed value—not its serialized bytes—is authoritative, with one exception: a
+JSON number is an **integer** only when its source lexeme has no fraction and
+no exponent, that is, matches `-?(0|[1-9][0-9]*)`. `1.0`, `1e0`, and `1.5` are
+all non-integer numbers. Writers SHOULD use two-space indentation and a
+trailing LF so repositories remain pleasant to inspect.
 
-Unknown fields, non-integer numbers, and invalid typed values are errors.
-`patches` contains exactly the causal closure of `frontier`, sorted by author
-and then numeric revision, with no unreachable patches.
+Unknown fields, non-integer numbers where an integer is expected, and invalid
+typed values are errors. `patches` contains exactly the causal closure of
+`frontier`, sorted by author and then numeric revision, with no unreachable
+patches.
 
 A version is **known** (or **materializable**) in a repository when it is
 syntactically valid, every patch `(c, n)` selected by `n <= V[c]` exists, and
@@ -339,9 +346,12 @@ concurrent patches.
 
 ### 6.2 Integrating one patch
 
-For incoming patch `P`, materialize its exact base tree `B`. Let `C` be the
-canonical tree built so far. It contains `B` plus only earlier concurrent
-effects.
+For incoming patch `P`, materialize its exact base tree `B`. Materializing `B`
+is itself a replay of the patches selected by `B` (§6.1) and may resolve
+conflicts of its own. Its warnings are discarded; only the integrations
+performed by the top-level replay contribute to that replay's warning set. Let
+`C` be the canonical tree built so far. It contains `B` plus only earlier
+concurrent effects.
 
 First resolve namespace conflicts for the patch as a whole. Let `S` be the
 paths that `P` makes present, and let `C'` be `C` with every path that `P`
@@ -420,9 +430,10 @@ Rules that discard a whole effect add one warning pair:
 (<path>, <delete-wins|later-create-wins|later-put-wins|namespace-wins|put-wins>)
 ```
 
-Replay returns the set of unique warning pairs sorted by path, then reason.
-Line OT emits no warning. Merge prints only pairs present in the joined replay
-but absent from the pre-merge local replay, one per line:
+Replay returns the set of unique warning pairs produced by its own top-level
+integrations, sorted by path, then reason. Line OT emits no warning. Merge
+prints only pairs present in the joined replay but absent from the pre-merge
+local replay, one per line:
 
 ```text
 warning: auto-resolved <path>: <reason>
@@ -709,8 +720,18 @@ For `merge` and `revert`, Snap MUST complete parsing, repository validation,
 replay, dirty-tree checks, and target-tree construction before writing.
 Validation failures cause no mutation.
 
-Any command that scans the working tree fails on a symlink or other unsupported
-entry rather than following or silently ignoring it.
+Any command that scans the working tree fails on an unsupported entry or an
+invalid working tree path rather than following or silently ignoring it. When
+several entries offend, Snap reports the one whose relative path is least in
+unsigned UTF-8 byte order, regardless of directory structure or the order in
+which the filesystem lists entries. The plain-mode errors are:
+
+```text
+snap: unsupported working tree entry: <path>
+snap: invalid working tree path: <path>
+```
+
+`<path>` is the entry's relative path with `/` separators, printed verbatim.
 
 During mutation, Snap updates working files first and replaces
 `repository.json` through a same-directory temporary file only after the
