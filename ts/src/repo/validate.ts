@@ -8,12 +8,16 @@
  * would materialize every tree twice. The frontier match runs last, after replay, because a
  * frontier gap and a cyclic history can describe the same broken repository and the spec's
  * error ordering (§4.5, pinned by the acceptance suite) attributes it to replay first.
+ *
+ * The cross-repository dot check (§7.6) also lives here because it is validation over decoded
+ * values, not replay: `assertNoPatchCollisions` is the gate both `diff --repo` and `merge`'s
+ * dot-keyed union (§7.8) owe before trusting a shared history across two repositories.
  */
 import { compareBytes } from '../core/bytes.ts';
 import { SnapError } from '../core/errors.ts';
 import { componentOf } from '../core/version.ts';
 
-import { type Patch, type Repository } from './model.ts';
+import { encodePatch, type Patch, type Repository } from './model.ts';
 import { type ReplayResult, replayRepository } from './replay.ts';
 
 /**
@@ -28,6 +32,30 @@ export function validateRepository(repository: Repository): ReplayResult {
   const replayed = replayRepository(repository);
   checkFrontier(repository);
   return replayed;
+}
+
+/**
+ * The cross-repository dot check (SPEC §7.6): every dot present in both repositories must parse
+ * to the same patch. Comparison goes through `encodePatch` — §4.2's structural-equality form —
+ * so two repositories describing one change with different JSON key order or spacing agree,
+ * while any difference in meaning (message, edit, content, base) fails as corrupt. The detail
+ * text is pinned by tests/16: `patch collision: <author> revision <n>`.
+ *
+ * Walks `local`'s patches, which step 2 keeps ascending by author then revision, so where
+ * several dots collide the one reported is the least in byte order — the same determinism
+ * every other multi-failure check here offers.
+ */
+export function assertNoPatchCollisions(local: Repository, remote: Repository): void {
+  const remotePatches = new Map<string, string>();
+  for (const patch of remote.patches) {
+    remotePatches.set(`${patch.author}->${String(patch.revision)}`, encodePatch(patch));
+  }
+  for (const patch of local.patches) {
+    const counterpart = remotePatches.get(`${patch.author}->${String(patch.revision)}`);
+    if (counterpart !== undefined && counterpart !== encodePatch(patch)) {
+      throw new SnapError(`patch collision: ${patch.author} revision ${String(patch.revision)}`);
+    }
+  }
 }
 
 /**

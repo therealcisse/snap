@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { decodeUtf8 } from '../core/bytes.ts';
 
 import { type Repository, decodeRepository } from './model.ts';
-import { validateRepository } from './validate.ts';
+import { assertNoPatchCollisions, validateRepository } from './validate.ts';
 
 type RawPatch = Record<string, unknown>;
 
@@ -174,6 +174,88 @@ describe('validateRepository: replay orchestration', () => {
           repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [{ type: 'delete', path: 'f' }])]),
         ),
       { message: 'delete of absent path: f' },
+    );
+  });
+});
+
+describe('assertNoPatchCollisions: the §7.6 cross-repository dot check', () => {
+  it('accepts structurally equal shared dots', () => {
+    const left = repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [createF])]);
+    const right = repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [createF])]);
+    assertNoPatchCollisions(left, right);
+  });
+
+  it('compares parsed values, not JSON spelling: reordered keys agree', () => {
+    // The same patch as local's with every object's keys in a different insertion order — §4.2
+    // structural equality is the comparison unit, mirroring tests/26's duplicate fixtures.
+    const right = repositoryOf(
+      [['a@x', 1]],
+      [
+        {
+          changes: [{ edit: [{ insert: ['one\n'] }], path: 'f', type: 'text' }],
+          message: 'm',
+          base: [],
+          revision: 1,
+          author: 'a@x',
+        },
+      ],
+    );
+    assertNoPatchCollisions(repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [createF])]), right);
+  });
+
+  it('accepts repositories with no dot in common', () => {
+    assertNoPatchCollisions(
+      repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [createF])]),
+      repositoryOf(
+        [['b@x', 1]],
+        [patch('b@x', 1, [], [{ type: 'put', path: 'g', content: 'YQ==' }])],
+      ),
+    );
+  });
+
+  it('rejects a differing message, edit, or content on a shared dot', () => {
+    const left = repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [createF])]);
+    const differings = [
+      { ...patch('a@x', 1, [], [createF]), message: 'different' },
+      patch('a@x', 1, [], [{ type: 'text', path: 'f', edit: [{ insert: ['uno\n'] }] }]),
+      patch('a@x', 1, [], [{ type: 'put', path: 'f', content: 'YQI=' }]),
+    ];
+    for (const differing of differings) {
+      assert.throws(
+        () => {
+          assertNoPatchCollisions(left, repositoryOf([['a@x', 1]], [differing]));
+        },
+        { message: 'patch collision: a@x revision 1' },
+      );
+    }
+  });
+
+  it('reports the least dot in byte order when several collide', () => {
+    const left = repositoryOf(
+      [
+        ['a@x', 1],
+        ['b@x', 1],
+      ],
+      [
+        patch('a@x', 1, [], [createF]),
+        patch('b@x', 1, [['a@x', 1]], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+      ],
+    );
+    const right = repositoryOf(
+      [
+        ['a@x', 1],
+        ['b@x', 1],
+      ],
+      [
+        patch('a@x', 1, [], [{ type: 'put', path: 'h', content: 'YQ==' }]),
+        patch('b@x', 1, [['a@x', 1]], [{ type: 'put', path: 'g', content: 'YQI=' }]),
+      ],
+    );
+    assert.throws(
+      () => {
+        assertNoPatchCollisions(left, right);
+      },
+      { message: 'patch collision: a@x revision 1' },
     );
   });
 });

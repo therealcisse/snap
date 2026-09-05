@@ -11,7 +11,7 @@ import { writeSync } from 'node:fs';
 
 import { commit } from '../commands/commit.ts';
 import { setContributorId } from '../commands/config.ts';
-import { diffVersions, diffWorktree } from '../commands/diff.ts';
+import { diffCrossRepository, diffVersions, diffWorktree } from '../commands/diff.ts';
 import { init } from '../commands/init.ts';
 import { log } from '../commands/log.ts';
 import { revert } from '../commands/revert.ts';
@@ -53,7 +53,7 @@ export async function run(argv: readonly string[], ctx: Context): Promise<number
     if (command.kind === 'serve') {
       return await serve(command.port, ctx.cwd, ctx.out.stdout);
     }
-    emit(execute(command, argv, ctx), ctx);
+    emit(await execute(command, argv, ctx), ctx);
     return 0;
   } catch (failure: unknown) {
     const { exitCode, line } = describeFailure(failure);
@@ -70,10 +70,18 @@ export function fdOutput(): Output {
   };
 }
 
-/** The commands that complete synchronously and speak in `CommandOutput`s; serve runs above. */
+/**
+ * The commands that speak in `CommandOutput`s; serve runs above. `diff --repo` is the one that
+ * awaits — its HTTP operand (§9) is asynchronous command input — so dispatch is async while
+ * every other command body stays a synchronous call.
+ */
 type ImmediateCommand = Exclude<Command, { kind: 'serve' }>;
 
-function execute(command: ImmediateCommand, argv: readonly string[], ctx: Context): CommandOutput {
+async function execute(
+  command: ImmediateCommand,
+  argv: readonly string[],
+  ctx: Context,
+): Promise<CommandOutput> {
   switch (command.kind) {
     case 'showVersion':
       return showVersion();
@@ -94,10 +102,8 @@ function execute(command: ImmediateCommand, argv: readonly string[], ctx: Contex
     case 'diffWorktree':
       return diffWorktree(ctx.cwd);
     case 'diff':
-      // The cross-repository form stays unimplemented; the boundary reports it with the
-      // invocation's own words, as the not-implemented lines have always read (tests/24).
       if (command.repo !== undefined) {
-        return notImplemented(argv);
+        return diffCrossRepository(command.oldVersion, command.newVersion, ctx.cwd, command.repo);
       }
       return diffVersions(command.oldVersion, command.newVersion, ctx.cwd);
     case 'revert':

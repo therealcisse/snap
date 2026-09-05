@@ -70,15 +70,22 @@ export interface LoadedRepository {
 }
 
 /**
- * Locates, decodes, and validates the nearest repository's `repository.json` (SPEC §4.5).
- *
- * Throws `not a Snap repository` when there is no enclosing repository or the found root's
- * `repository.json` cannot be read, the decoder's `SnapError` when the file is malformed, and
- * the validator's `SnapError` when the history is invalid — before any command mutates
- * anything, because every repository command owes its checks first (§7.6, §10).
+ * Locates, decodes, and validates the nearest repository's `repository.json` (SPEC §4.5): the
+ * walk finds the root, then `loadRepositoryAtRoot` does the loading.
  */
 export function loadValidatedRepository(startDir: string): LoadedRepository {
-  const root = findRepositoryRoot(startDir);
+  return loadRepositoryAtRoot(findRepositoryRoot(startDir));
+}
+
+/**
+ * Decodes and validates the repository rooted at `root` (SPEC §4.5) — the loader a repository
+ * operand uses (SPEC §7), where the operand names the repository root itself rather than asking
+ * for the nearest walk. Throws `not a Snap repository` when the root's `repository.json` cannot
+ * be read, the decoder's `SnapError` when the file is malformed, and the validator's `SnapError`
+ * when the history is invalid — before any command mutates anything, because every repository
+ * command owes its checks first (§7.6, §10).
+ */
+export function loadRepositoryAtRoot(root: string): LoadedRepository {
   let text: string;
   try {
     text = readFileSync(join(root, SNAP_DIRECTORY, REPOSITORY_FILE), 'utf8');

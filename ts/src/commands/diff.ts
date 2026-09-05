@@ -1,6 +1,8 @@
 /**
- * `snap diff` (SPEC §7.6), both forms: no operands compares the current tree with the working
- * tree; `diff <old> <new>` compares two locally known versions.
+ * `snap diff` (SPEC §7.6), all three forms: no operands compares the current tree with the
+ * working tree; `diff <old> <new>` compares two locally known versions; `diff <old> <new>
+ * --repo <repository>` resolves `old` in the nearest repository and `new` in another local or
+ * HTTP repository (§7, §9) without importing it.
  *
  * Rendering is private to this file and adds nothing the spec does not fix: one whole-file
  * block per changed text path — headers always from 1, `@@ -1,<old count> +1,<new count> @@`,
@@ -9,12 +11,16 @@
  * present-and-non-text. Both versions are resolved and materialized before any output, so a
  * bad operand fails the whole command rather than half-printing a diff.
  */
+import { resolve } from 'node:path';
+
 import { decodeUtf8, isText } from '../core/bytes.ts';
-import { loadValidatedRepository } from '../fs/locate.ts';
+import { loadRepositoryAtRoot, loadValidatedRepository } from '../fs/locate.ts';
 import { scanWorkingTree } from '../fs/worktree.ts';
-import { resolveKnownVersion } from '../repo/model.ts';
+import { fetchRepository } from '../http/client.ts';
+import { type Repository, resolveKnownVersion } from '../repo/model.ts';
 import { materializeVersion } from '../repo/replay.ts';
 import { diffTrees, type TreeChange } from '../repo/tree.ts';
+import { assertNoPatchCollisions } from '../repo/validate.ts';
 import { diffTokens } from '../text/diff.ts';
 import { type EditOp } from '../text/edit.ts';
 import { tokenize } from '../text/tokens.ts';
@@ -32,15 +38,50 @@ export function diffWorktree(cwd: string): CommandOutput {
 }
 
 /**
- * The two-version form. `--repo` stays with the CLI boundary — the cross-repository diff is
- * not implemented, and the boundary already speaks its `not implemented` line — so this body
- * sees only local operands, resolved in order: old, then new (§7.6 validates before output).
+ * The two-version form: both operands resolve in the nearest repository, in order — old, then
+ * new (§7.6 validates before output).
  */
 export function diffVersions(oldVersion: string, newVersion: string, cwd: string): CommandOutput {
   const { repository } = loadValidatedRepository(cwd);
   const oldTree = materializeVersion(repository, resolveKnownVersion(repository, oldVersion));
   const newTree = materializeVersion(repository, resolveKnownVersion(repository, newVersion));
   return { stdout: render(diffTrees(oldTree, newTree)), stderr: '' };
+}
+
+/**
+ * The cross-repository form (§7.6, §9): `old` resolves and materializes in the nearest local
+ * repository, `new` in the operand repository, and nothing is imported. Validation is ordered
+ * before any output: both repositories arrive already validated, both versions must resolve as
+ * known, and the shared-dot check runs before either tree materializes, so a corrupt pairing
+ * fails whole rather than half-printing a diff.
+ */
+export async function diffCrossRepository(
+  oldVersion: string,
+  newVersion: string,
+  cwd: string,
+  operand: string,
+): Promise<CommandOutput> {
+  const { repository: local } = loadValidatedRepository(cwd);
+  const remote = await loadRepositoryOperand(operand, cwd);
+  const from = resolveKnownVersion(local, oldVersion);
+  const to = resolveKnownVersion(remote, newVersion);
+  assertNoPatchCollisions(local, remote);
+  const oldTree = materializeVersion(local, from);
+  const newTree = materializeVersion(remote, to);
+  return { stdout: render(diffTrees(oldTree, newTree)), stderr: '' };
+}
+
+/**
+ * The repository operand (§7): an explicit `http://` or `https://` URL goes to the single-GET
+ * client (§9); anything else is a local path to a repository root, resolved against the working
+ * directory. Both arms return a repository that already passed §4.5 — the client validates what
+ * it fetches, the loader validates what it reads — so the caller never re-validates.
+ */
+async function loadRepositoryOperand(operand: string, cwd: string): Promise<Repository> {
+  if (operand.startsWith('http://') || operand.startsWith('https://')) {
+    return fetchRepository(operand);
+  }
+  return loadRepositoryAtRoot(resolve(cwd, operand)).repository;
 }
 
 /** Renders the delta's blocks in `diffTrees`' byte order; an empty delta is no output. */

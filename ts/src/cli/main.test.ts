@@ -96,16 +96,17 @@ describe('run', () => {
     assert.equal(h.stderr(), 'snap: invalid version: (a@x->01)\n');
   });
 
-  it('keeps the cross-repository diff and merge not implemented', async () => {
+  it('routes diff --repo to its operand and keeps merge not implemented', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
     emptyRepository(cwd);
     const h = harness({ cwd });
     assert.equal(await run(['diff', '()', '()', '--repo', 'other'], h.ctx), 1);
     assert.equal(await run(['merge', 'other'], h.ctx), 1);
-    // The harness accumulates, so one assertion carries both refusals in order.
+    // The harness accumulates, so one assertion carries both refusals in order: the diff
+    // operand `other` is not a repository, and merge is still unimplemented (§7.7).
     assert.equal(
       h.stderr(),
-      'snap: not implemented: diff () () --repo other\n' + 'snap: not implemented: merge other\n',
+      'snap: not a Snap repository\n' + 'snap: not implemented: merge other\n',
     );
   });
 
