@@ -84,23 +84,23 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 - [x] §6.2 rules 1–4 with namespace rule applied before per-path rules.
 - [x] §6.4 winner table and sorted unique warning set — `tests/10-merge-conflicts.yaml`, `tests/11-namespace-conflicts.yaml`, `tests/17-concurrent-creates.yaml`.
 - [x] Text OT integration path — `tests/09-merge-text.yaml`, `tests/22-ot-matrix.yaml`.
-- [ ] `snap merge <path>`: two validations, dot-keyed union with corruption detection, frontier join, joined replay, warning difference, dirty-tree refusal, validation before mutation (§7.8, §10) — `tests/16-dot-collision.yaml`, `tests/20-dirty-merge.yaml`, `tests/26-portability-and-failure-safety.yaml`.
+- [x] `snap merge <path>`: two validations, dot-keyed union with corruption detection, frontier join, joined replay, warning difference, dirty-tree refusal, validation before mutation (§7.8, §10) — `tests/16-dot-collision.yaml`, `tests/20-dirty-merge.yaml`, `tests/26-portability-and-failure-safety.yaml`.
 - [x] Convergence — `tests/18-three-way-convergence.yaml`, `tests/21-version-algebra.yaml`.
 
 ## HTTP
 
 - [x] `snap --serve [port]` on 127.0.0.1 with GET/HEAD `/repository.json`, 404, 405 with `Allow`, plain flushed startup URL, SIGINT/SIGTERM exit 0 (§7.9, §9) — `tests/12-http-server.yaml`.
-- [ ] HTTP repository operand: single GET, status 200 required, no redirects, strict parse (§9) — `tests/13-http-client.yaml`.
+- [x] HTTP repository operand: single GET, status 200 required, no redirects, strict parse (§9) — `tests/13-http-client.yaml`.
 - [x] `snap diff <old> <new> --repo <repository>` local and HTTP with cross-repository dot check (§7.6).
-- [ ] `snap merge <url>` (§7.8).
+- [x] `snap merge <url>` (§7.8).
 
 ## Terminal presentation
 
-- [ ] §7.11 terminal rendering for init/commit/revert/merge, status, log, diff, `--version`, warnings, errors; `SNAP_COLOR=always` overrides `NO_COLOR`; config silent and serve URL plain — `tests/28-terminal-presentation.yaml`.
+- [x] §7.11 terminal rendering for init/commit/revert/merge, status, log, diff, `--version`, warnings, errors; `SNAP_COLOR=always` overrides `NO_COLOR`; config silent and serve URL plain — `tests/28-terminal-presentation.yaml`.
 
 ## Hardening and performance
 
 - [x] Property test: random valid causal patch graphs; import-permutation invariance of frontier, patch set, warnings, and tree bytes (§11).
 - [x] Startup profile under the harness's cold `TMPDIR`; module graph kept small.
 - [x] Scale smoke outside the suite (1 000-patch linear history, 100-file tree, 2 000-line diff) recorded as a research note.
-- [ ] Full `./verify --lang ts` green; `npm run build` clean; `cd test-harness && npm run check && npm test` unchanged.
+- [x] Full `./verify --lang ts` green; `npm run build` clean; `cd test-harness && npm run check && npm test` unchanged.
