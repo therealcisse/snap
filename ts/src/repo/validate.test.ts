@@ -146,23 +146,25 @@ describe('validateRepository: replay orchestration', () => {
     );
   });
 
-  it('rejects concurrent-ready histories through replay', () => {
-    assert.throws(
-      () =>
-        validateRepository(
-          repositoryOf(
-            [
-              ['a@x', 1],
-              ['b@x', 1],
-            ],
-            [
-              patch('a@x', 1, [], [createF]),
-              patch('b@x', 1, [], [{ type: 'put', path: 'g', content: 'YQ==' }]),
-            ],
-          ),
-        ),
-      { message: 'concurrent replay is not implemented yet' },
+  it('accepts concurrent-ready histories through replay, returning the joined tree', () => {
+    const result = validateRepository(
+      repositoryOf(
+        [
+          ['a@x', 1],
+          ['b@x', 1],
+        ],
+        [
+          patch('a@x', 1, [], [createF]),
+          patch('b@x', 1, [], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+        ],
+      ),
     );
+    // The two roots integrate in §6.1 order — b@x's `(b@x->1)` before a@x's `(a@x->1)` —
+    // and touch disjoint paths, so validation now succeeds where it used to fail on §6.2's
+    // absence. The returned tree is the whole-history join, exactly what commands materialize.
+    assert.equal(decodeUtf8(result.tree.get('f')!), 'one\n');
+    assert.deepEqual(result.tree.get('g'), new Uint8Array([0x61]));
+    assert.deepEqual(result.warnings, []);
   });
 
   it('surfaces step-5 change failures from inside the replay walk', () => {

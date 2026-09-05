@@ -62,7 +62,7 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 
 - [x] Typed `Patch`, `Change`, `Repository` decode with exact schema and canonical two-space encode with trailing LF (§4.1–§4.3).
 - [x] Canonical structural-equality serialization for dot comparison (§3.5, §4.2, §7.6).
-- [ ] Tree type with ancestor-set prefix-free check and namespace ancestor/descendant queries (§2, §6.2).
+- [x] Tree type with ancestor-set prefix-free check and namespace ancestor/descendant queries (§2, §6.2).
 - [x] §4.5 steps 1–5: schema, sort order, dot uniqueness, contiguity, closure, `revision = base[author] + 1`, change-vs-base — `tests/15-repository-validation.yaml`, `tests/23-strict-validation-matrix.yaml`, `tests/27-history-canonicality.yaml`.
 - [x] Linear-history replay (single ready patch, `I == base`) as §4.5 step 6.
 
@@ -80,8 +80,8 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 ## Concurrent replay and merge
 
 - [x] §6.1 ready-set selection via integrated vector with Snap-order and author/revision tie-break; cycle and missing-dependency failure.
-- [ ] Exact-base materialization memo keyed by canonical version string, seeded by snapshotting known-base states, with `I == base` shortcut; unit test asserting materialize calls ≤ P+1 on a three-contributor concurrent history.
-- [ ] §6.2 rules 1–4 with namespace rule applied before per-path rules.
+- [x] Exact-base materialization memo keyed by canonical version string, seeded by snapshotting known-base states, with `I == base` shortcut; unit test asserting materialize calls ≤ P+1 on a three-contributor concurrent history.
+- [x] §6.2 rules 1–4 with namespace rule applied before per-path rules.
 - [ ] §6.4 winner table and sorted unique warning set — `tests/10-merge-conflicts.yaml`, `tests/11-namespace-conflicts.yaml`, `tests/17-concurrent-creates.yaml`.
 - [ ] Text OT integration path — `tests/09-merge-text.yaml`, `tests/22-ot-matrix.yaml`.
 - [ ] `snap merge <path>`: two validations, dot-keyed union with corruption detection, frontier join, joined replay, warning difference, dirty-tree refusal, validation before mutation (§7.8, §10) — `tests/16-dot-collision.yaml`, `tests/20-dirty-merge.yaml`, `tests/26-portability-and-failure-safety.yaml`.
