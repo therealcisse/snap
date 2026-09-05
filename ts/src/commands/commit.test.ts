@@ -60,12 +60,13 @@ describe('selectChanges', () => {
 });
 
 describe('commit', () => {
-  it('authors one patch, prints the new version, and writes canonical metadata', () => {
+  it('authors one patch, returns the committed version, and writes canonical metadata', () => {
     const root = repository();
     write(root, 'a.txt', 'a\n');
     assert.deepEqual(commit('first', root, { HOME: '/nonexistent' }), {
-      stdout: '(a@x->1)\n',
-      stderr: '',
+      kind: 'success',
+      label: 'Committed',
+      version: '(a@x->1)',
     });
     const stored = decodeRepository(
       readFileSync(join(root, SNAP_DIRECTORY, 'repository.json'), 'utf8'),
@@ -147,7 +148,11 @@ describe('commit', () => {
       ) + '\n',
     );
     write(root, 'f', 'b');
-    assert.deepEqual(commit('a2', root, {}), { stdout: '(a@x->2,b@x->1)\n', stderr: '' });
+    assert.deepEqual(commit('a2', root, {}), {
+      kind: 'success',
+      label: 'Committed',
+      version: '(a@x->2,b@x->1)',
+    });
     const stored = decodeRepository(
       readFileSync(join(root, SNAP_DIRECTORY, 'repository.json'), 'utf8'),
     );

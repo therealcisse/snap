@@ -2,10 +2,12 @@
  * CLI boundary.
  *
  * This is the only module in `src/` that writes to the process's standard streams. Commands are
- * pure — parsed arguments in, an output record out — so `run` is where an invocation becomes
- * writes and an exit status; `serve` is the one exception, a long-running command that prints
- * its own startup line. Writes are synchronous so the entire output is flushed before the
- * process ends, even when stdout is a pipe (SPEC §10).
+ * pure — parsed arguments in, a result record out — so `run` is where an invocation becomes
+ * writes and an exit status: it resolves each stream's §7.11 presentation, renders the result
+ * accordingly, and owns the one error path. `serve` is the one exception, a long-running
+ * command that prints its own startup line straight to the raw sink, which is what keeps the
+ * URL plain under `SNAP_COLOR=always`. Writes are synchronous so the entire output is flushed
+ * before the process ends, even when stdout is a pipe (SPEC §10).
  */
 import { writeSync } from 'node:fs';
 
@@ -22,9 +24,9 @@ import { SnapError, describeFailure } from '../core/errors.ts';
 import { findRepositoryRoot } from '../fs/locate.ts';
 
 import { type Command, parseArgs } from './args.ts';
-import { resolveModes } from './presentation.ts';
+import { type StreamModes, render, renderErrorLine, resolveModes } from './presentation.ts';
 
-import type { CommandOutput } from '../commands/output.ts';
+import type { CommandResult } from '../commands/output.ts';
 
 /** Sinks for the two standard streams. Tests substitute buffers; production binds descriptors. */
 export interface Output {
@@ -43,21 +45,22 @@ export interface Context {
 
 /** Runs one CLI invocation and returns the process exit status. Never throws. */
 export async function run(argv: readonly string[], ctx: Context): Promise<number> {
+  // `undefined` means no valid presentation was selected, so the catch path renders plain —
+  // §7.11: the invalid-`SNAP_COLOR` error itself never carries escapes.
+  let modes: StreamModes | undefined;
   try {
-    // §7.11: an invalid SNAP_COLOR fails before any command runs. The resolved modes take
-    // effect when rendering lands; today resolution exists to validate the invocation.
-    resolveModes(ctx.env, ctx.isStdoutTty, ctx.isStderrTty);
+    modes = resolveModes(ctx.env, ctx.isStdoutTty, ctx.isStderrTty);
     const command = parseArgs(argv);
-    // §7.9: serve runs until a signal ends it, so it cannot return an output record. It still
-    // runs inside this boundary so its startup failures funnel through the one error path.
+    // §7.9/§7.11: serve runs until a signal ends it, so it cannot return a result record; it
+    // still runs inside this boundary so its startup failures funnel through the one error path.
     if (command.kind === 'serve') {
       return await serve(command.port, ctx.cwd, ctx.out.stdout);
     }
-    emit(execute(command, argv, ctx), ctx);
+    emit(execute(command, argv, ctx), ctx, modes);
     return 0;
   } catch (failure: unknown) {
     const { exitCode, line } = describeFailure(failure);
-    ctx.out.stderr(line);
+    ctx.out.stderr(renderErrorLine(line, modes?.stderr ?? 'plain'));
     return exitCode;
   }
 }
@@ -70,10 +73,10 @@ export function fdOutput(): Output {
   };
 }
 
-/** The commands that complete synchronously and speak in `CommandOutput`s; serve runs above. */
+/** The commands that complete synchronously and speak in `CommandResult`s; serve runs above. */
 type ImmediateCommand = Exclude<Command, { kind: 'serve' }>;
 
-function execute(command: ImmediateCommand, argv: readonly string[], ctx: Context): CommandOutput {
+function execute(command: ImmediateCommand, argv: readonly string[], ctx: Context): CommandResult {
   switch (command.kind) {
     case 'showVersion':
       return showVersion();
@@ -115,7 +118,8 @@ function notImplemented(argv: readonly string[]): never {
   throw new SnapError(`not implemented: ${argv.join(' ')}`);
 }
 
-function emit(output: CommandOutput, ctx: Context): void {
+function emit(result: CommandResult, ctx: Context, modes: StreamModes): void {
+  const output = render(result, modes);
   ctx.out.stdout(output.stdout);
   ctx.out.stderr(output.stderr);
 }

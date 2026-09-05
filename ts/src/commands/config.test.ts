@@ -26,7 +26,7 @@ describe('setContributorId (SPEC §7.2, §8, tests/03)', () => {
   it('writes the global file under $HOME with the exact canonical bytes, silently', () => {
     const home = directory();
     const output = setContributorId('a@x', { global: true, cwd: directory(), home });
-    assert.deepEqual(output, { stdout: '', stderr: '' });
+    assert.deepEqual(output, { kind: 'config' });
     assert.equal(readFileSync(join(home, '.snapconfig.json'), 'utf8'), CANONICAL);
   });
 

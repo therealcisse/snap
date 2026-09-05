@@ -72,11 +72,11 @@ describe('snap --serve', () => {
     return dir;
   }
 
-  /** Spawns `snap --serve 0` in `cwd`; `url` resolves on the printed startup line. */
-  function startServe(cwd: string): Running {
+  /** Spawns `snap --serve 0` in `cwd` under `env`; `url` resolves on the printed startup line. */
+  function startServe(cwd: string, env: NodeJS.ProcessEnv = process.env): Running {
     // Through the `snap` launcher rather than tsx by hand: its `exec` makes the shell pid the
     // node pid, so a signal to `child` reaches the server itself.
-    const child = spawn('sh', [SNAP, '--serve', '0'], { cwd });
+    const child = spawn('sh', [SNAP, '--serve', '0'], { cwd, env });
     let stdout = '';
     let stderr = '';
     const url = new Promise<string>((resolve, reject) => {
@@ -150,6 +150,21 @@ describe('snap --serve', () => {
     const running = startServe(repositoryDirectory(REPOSITORY_JSON));
     const url = await running.url;
     running.child.kill('SIGINT');
+    const exit = await running.exit;
+    assert.equal(exit.code, 0);
+    assert.equal(exit.stdout, `${url}\n`);
+    assert.equal(exit.stderr, '');
+  });
+
+  it('keeps the startup URL plain under SNAP_COLOR=always', { timeout: 30000 }, async () => {
+    // §7.11: serve prints its startup line to the raw sink, so it carries no SGR bytes even
+    // when the rest of the invocation would render terminal mode.
+    const running = startServe(repositoryDirectory(REPOSITORY_JSON), {
+      ...process.env,
+      SNAP_COLOR: 'always',
+    });
+    const url = await running.url;
+    running.child.kill('SIGTERM');
     const exit = await running.exit;
     assert.equal(exit.code, 0);
     assert.equal(exit.stdout, `${url}\n`);

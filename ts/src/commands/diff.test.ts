@@ -64,7 +64,7 @@ function repository(
 }
 
 describe('diffWorktree', () => {
-  it('renders the tests/05 golden: adds, repeated-line edits, missing final newlines', () => {
+  it('produces the tests/05 golden: adds, repeated-line edits, missing final newlines', () => {
     const root = repository([
       {
         author: 'a@x',
@@ -77,7 +77,8 @@ describe('diffWorktree', () => {
     writeFileSync(join(root, 'repeated.txt'), 'b\na\na');
     writeFileSync(join(root, 'added.txt'), 'new');
     assert.deepEqual(diffWorktree(root), {
-      stdout:
+      kind: 'diff',
+      text:
         '--- /dev/null\n' +
         '+++ b/added.txt\n' +
         '@@ -1,0 +1,1 @@\n' +
@@ -91,21 +92,20 @@ describe('diffWorktree', () => {
         ' a\n' +
         '+a\n' +
         '\\ No newline at end of file\n',
-      stderr: '',
     });
   });
 
-  it('renders the tests/06 golden: binary lines and the empty-file block', () => {
+  it('produces the tests/06 golden: binary lines and the empty-file block', () => {
     const root = repository();
     writeFileSync(join(root, 'empty'), '');
     writeFileSync(join(root, 'data.bin'), Buffer.from([0x00, 0xff, 0x80, 0x01, 0x04, 0x12]));
     assert.deepEqual(diffWorktree(root), {
-      stdout:
+      kind: 'diff',
+      text:
         'Binary files /dev/null and b/data.bin differ\n' +
         '--- /dev/null\n' +
         '+++ b/empty\n' +
         '@@ -1,0 +1,0 @@\n',
-      stderr: '',
     });
     // A binary file already current, then deleted from the working tree, is the other
     // binary side: present bytes against /dev/null.
@@ -114,8 +114,8 @@ describe('diffWorktree', () => {
     commit('bin', deleted, {});
     rmSync(join(deleted, 'data.bin'));
     assert.deepEqual(diffWorktree(deleted), {
-      stdout: 'Binary files a/data.bin and /dev/null differ\n',
-      stderr: '',
+      kind: 'diff',
+      text: 'Binary files a/data.bin and /dev/null differ\n',
     });
   });
 });
@@ -133,7 +133,7 @@ describe('diffVersions', () => {
     commit('new', root, {});
     assert.deepEqual(diffVersions('(a@x->1)', '(a@x->2)', root), dirty);
     // Equal versions are the empty success.
-    assert.deepEqual(diffVersions('(a@x->2)', '(a@x->2)', root), { stdout: '', stderr: '' });
+    assert.deepEqual(diffVersions('(a@x->2)', '(a@x->2)', root), { kind: 'diff', text: '' });
   });
 
   it('resolves old before new, refusing unknown and non-canonical operands', () => {

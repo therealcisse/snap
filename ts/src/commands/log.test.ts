@@ -46,7 +46,7 @@ function createF(): RawPatch {
 }
 
 describe('log', () => {
-  it('prints patches newest first with result versions and escaped messages', () => {
+  it('reports patches newest first with result versions and escaped messages', () => {
     const root = repository(createF(), {
       author: 'a@x',
       revision: 2,
@@ -55,12 +55,15 @@ describe('log', () => {
       changes: [{ type: 'text', path: 'f', edit: [{ retain: 1 }, { delete: 1 }] }],
     });
     assert.deepEqual(log(root), {
-      stdout: '(a@x->2)\ta@x\tsecond\n' + '(a@x->1)\ta@x\tfirst\\tline\\nsecond\\\\tail\n',
-      stderr: '',
+      kind: 'log',
+      entries: [
+        { version: '(a@x->2)', author: 'a@x', message: 'second' },
+        { version: '(a@x->1)', author: 'a@x', message: 'first\\tline\\nsecond\\\\tail' },
+      ],
     });
   });
 
-  it('prints nothing for the empty repository', () => {
-    assert.deepEqual(log(repository()), { stdout: '', stderr: '' });
+  it('reports no entries for the empty repository', () => {
+    assert.deepEqual(log(repository()), { kind: 'log', entries: [] });
   });
 });

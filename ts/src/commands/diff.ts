@@ -2,12 +2,13 @@
  * `snap diff` (SPEC §7.6), both forms: no operands compares the current tree with the working
  * tree; `diff <old> <new>` compares two locally known versions.
  *
- * Rendering is private to this file and adds nothing the spec does not fix: one whole-file
- * block per changed text path — headers always from 1, `@@ -1,<old count> +1,<new count> @@`,
- * the §5 script's tokens prefixed by space/minus/plus — `/dev/null` for an absent side, the
- * missing-final-LF marker, and the one `Binary files … differ` line when either side is
- * present-and-non-text. Both versions are resolved and materialized before any output, so a
- * bad operand fails the whole command rather than half-printing a diff.
+ * The plain §7.6 block is private to this file and adds nothing the spec does not fix: one
+ * whole-file block per changed text path — headers always from 1, `@@ -1,<old count> +1,
+ * <new count> @@`, the §5 script's tokens prefixed by space/minus/plus — `/dev/null` for an
+ * absent side, the missing-final-LF marker, and the one `Binary files … differ` line when
+ * either side is present-and-non-text. §7.11's terminal coloring is a line transform over
+ * these bytes owned by `cli/presentation.ts`. Both versions are resolved and materialized
+ * before any output, so a bad operand fails the whole command rather than half-printing.
  */
 import { decodeUtf8, isText } from '../core/bytes.ts';
 import { loadValidatedRepository } from '../fs/locate.ts';
@@ -19,16 +20,16 @@ import { diffTokens } from '../text/diff.ts';
 import { type EditOp } from '../text/edit.ts';
 import { tokenize } from '../text/tokens.ts';
 
-import type { CommandOutput } from './output.ts';
+import type { CommandResult } from './output.ts';
 
 /** The §7.6 line that follows a token lacking its final LF; one backslash, like git. */
 const NO_NEWLINE = '\\ No newline at end of file\n';
 
 /** The working-tree form: the frontier tree against one fresh scan, refusals included. */
-export function diffWorktree(cwd: string): CommandOutput {
+export function diffWorktree(cwd: string): CommandResult {
   const { root, replay } = loadValidatedRepository(cwd);
   const working = scanWorkingTree(root);
-  return { stdout: render(diffTrees(replay.tree, working)), stderr: '' };
+  return { kind: 'diff', text: render(diffTrees(replay.tree, working)) };
 }
 
 /**
@@ -36,11 +37,11 @@ export function diffWorktree(cwd: string): CommandOutput {
  * not implemented, and the boundary already speaks its `not implemented` line — so this body
  * sees only local operands, resolved in order: old, then new (§7.6 validates before output).
  */
-export function diffVersions(oldVersion: string, newVersion: string, cwd: string): CommandOutput {
+export function diffVersions(oldVersion: string, newVersion: string, cwd: string): CommandResult {
   const { repository } = loadValidatedRepository(cwd);
   const oldTree = materializeVersion(repository, resolveKnownVersion(repository, oldVersion));
   const newTree = materializeVersion(repository, resolveKnownVersion(repository, newVersion));
-  return { stdout: render(diffTrees(oldTree, newTree)), stderr: '' };
+  return { kind: 'diff', text: render(diffTrees(oldTree, newTree)) };
 }
 
 /** Renders the delta's blocks in `diffTrees`' byte order; an empty delta is no output. */

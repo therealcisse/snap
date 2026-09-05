@@ -11,18 +11,18 @@ import { SnapError } from '../core/errors.ts';
 import { SNAP_DIRECTORY, nearestRepository } from '../fs/locate.ts';
 import { EMPTY_REPOSITORY_JSON } from '../repo/model.ts';
 
-import type { CommandOutput } from './output.ts';
+import type { CommandResult } from './output.ts';
 
 const REPOSITORY_FILE = 'repository.json';
 
 /**
  * Creates an empty repository at `path` (resolved against `cwd`, created with any missing
- * parents when absent) and returns the `()` output.
+ * parents when absent) and returns the success record for the empty version `()`.
  *
  * Throws `SnapError` — `repository already exists` or `cannot initialize inside repository` —
  * before writing anything.
  */
-export function init(path: string, cwd: string): CommandOutput {
+export function init(path: string, cwd: string): CommandResult {
   const target = resolve(cwd, path);
   const snapDirectory = join(target, SNAP_DIRECTORY);
   if (isDirectory(snapDirectory)) {
@@ -36,7 +36,7 @@ export function init(path: string, cwd: string): CommandOutput {
   // `recursive` creates the target and any missing parents together with `.snap` (SPEC §7.1).
   mkdirSync(snapDirectory, { recursive: true });
   writeFileSync(join(snapDirectory, REPOSITORY_FILE), EMPTY_REPOSITORY_JSON);
-  return { stdout: '()\n', stderr: '' };
+  return { kind: 'success', label: 'Initialized repository', version: '()' };
 }
 
 /** `true` when `path` exists and is a directory; anything else, including an I/O error, is `false`. */

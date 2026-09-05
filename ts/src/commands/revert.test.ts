@@ -32,22 +32,29 @@ describe('revert', () => {
     writeFileSync(join(root, 'node/child'), 'child\n');
     commit('directory', root, {});
 
-    assert.deepEqual(revert('(a@x->1)', root, {}), { stdout: '(a@x->3)\n', stderr: '' });
+    assert.deepEqual(revert('(a@x->1)', root, {}), {
+      kind: 'success',
+      label: 'Reverted',
+      version: '(a@x->3)',
+    });
     assert.equal(readFileSync(join(root, 'node'), 'utf8'), 'file\n');
     assert.ok(!existsSync(join(root, 'node/child')));
 
-    assert.deepEqual(revert('(a@x->2)', root, {}), { stdout: '(a@x->4)\n', stderr: '' });
+    assert.deepEqual(revert('(a@x->2)', root, {}), {
+      kind: 'success',
+      label: 'Reverted',
+      version: '(a@x->4)',
+    });
     assert.equal(readFileSync(join(root, 'node/child'), 'utf8'), 'child\n');
-    assert.equal(
-      log(root).stdout,
-      [
-        '(a@x->4)\ta@x\trevert to (a@x->2)',
-        '(a@x->3)\ta@x\trevert to (a@x->1)',
-        '(a@x->2)\ta@x\tdirectory',
-        '(a@x->1)\ta@x\tfile',
-        '',
-      ].join('\n'),
-    );
+    assert.deepEqual(log(root), {
+      kind: 'log',
+      entries: [
+        { version: '(a@x->4)', author: 'a@x', message: 'revert to (a@x->2)' },
+        { version: '(a@x->3)', author: 'a@x', message: 'revert to (a@x->1)' },
+        { version: '(a@x->2)', author: 'a@x', message: 'directory' },
+        { version: '(a@x->1)', author: 'a@x', message: 'file' },
+      ],
+    });
     const stored = decodeRepository(
       readFileSync(join(root, SNAP_DIRECTORY, 'repository.json'), 'utf8'),
     );
