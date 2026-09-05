@@ -4,7 +4,13 @@ import { describe, it } from 'node:test';
 import { encodeUtf8 } from '../core/bytes.ts';
 import { SnapError } from '../core/errors.ts';
 
-import { ancestorPaths, assertPrefixFree, sortedPaths, type Tree } from './tree.ts';
+import {
+  ancestorPaths,
+  assertPrefixFree,
+  namespaceConflicts,
+  sortedPaths,
+  type Tree,
+} from './tree.ts';
 
 /** A tree built from `[path, text]` pairs; insertion order is deliberately caller-chosen. */
 function treeOf(...entries: readonly (readonly [string, string])[]): Tree {
@@ -38,6 +44,38 @@ describe('ancestorPaths', () => {
       assert.deepEqual(ancestorPaths(path), expected);
     });
   }
+});
+
+describe('namespaceConflicts', () => {
+  it('returns nothing for a path with no present ancestor or descendant', () => {
+    // `c` sits beside `a/b`, not inside or above it, and `q` is absent entirely; neither has a
+    // conflict in this tree, and `a/b`'s own presence does not conflict with itself.
+    assert.deepEqual(namespaceConflicts(treeOf(['a/b', 'x'], ['c', 'y'], ['a/b/c', 'z']), 'a/b'), [
+      'a/b/c',
+    ]);
+    assert.deepEqual(namespaceConflicts(treeOf(['a/b', 'x'], ['c', 'y']), 'q'), []);
+  });
+
+  it('finds a present ancestor', () => {
+    assert.deepEqual(namespaceConflicts(treeOf(['a', 'x'], ['b', 'y']), 'a/b'), ['a']);
+  });
+
+  it('finds present descendants', () => {
+    assert.deepEqual(
+      namespaceConflicts(treeOf(['a/b/c', 'x'], ['a/b/d', 'y'], ['b', 'z']), 'a/b'),
+      ['a/b/c', 'a/b/d'],
+    );
+  });
+
+  it('combines ancestors and descendants in byte order', () => {
+    assert.deepEqual(
+      namespaceConflicts(
+        treeOf(['a/b/c/d', 'w'], ['a', 'x'], ['a/b/c', 'y'], ['a/b/x', 'z'], ['b', 'q']),
+        'a/b',
+      ),
+      ['a', 'a/b/c', 'a/b/c/d', 'a/b/x'],
+    );
+  });
 });
 
 describe('assertPrefixFree', () => {

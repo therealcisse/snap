@@ -33,6 +33,30 @@ export function ancestorPaths(path: string): string[] {
 }
 
 /**
+ * The namespace conflicts of `path` in `tree` (SPEC §6.2): every present proper ancestor and
+ * every present proper descendant, ascending in byte order.
+ *
+ * Installing a tracked path requires removing whatever currently occupies its directory side
+ * (a present ancestor) or lives inside it (a present descendant) — §6.2's namespace rule.
+ * Ancestors are `ancestorPaths` lookups; descendants need a walk over the tree's paths, which
+ * at Snap's tree sizes costs less than maintaining a derived directory set.
+ */
+export function namespaceConflicts(tree: Tree, path: string): string[] {
+  const conflicts: string[] = [];
+  for (const ancestor of ancestorPaths(path)) {
+    if (tree.has(ancestor)) {
+      conflicts.push(ancestor);
+    }
+  }
+  for (const candidate of sortedPaths(tree)) {
+    if (ancestorPaths(candidate).includes(path)) {
+      conflicts.push(candidate);
+    }
+  }
+  return conflicts.sort(compareBytes);
+}
+
+/**
  * Asserts the tree invariant every patch result must restore (SPEC §5 step 5): no tracked path
  * is a proper path ancestor of another.
  *
