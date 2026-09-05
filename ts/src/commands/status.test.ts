@@ -25,9 +25,9 @@ function repository(...files: readonly (readonly [string, string])[]): string {
 }
 
 describe('status', () => {
-  it('prints only the version line for a clean empty repository', () => {
+  it('reports the empty version and no rows for a clean empty repository', () => {
     const root = repository();
-    assert.deepEqual(status(root), { stdout: 'version ()\n', stderr: '' });
+    assert.deepEqual(status(root), { kind: 'status', version: '()', rows: [] });
   });
 
   it('codes adds, modifications, and deletes in byte order', () => {
@@ -38,16 +38,27 @@ describe('status', () => {
       ['\u00e9', 'accent\n'],
       ['\u{1F600}', 'emoji\n'],
     );
-    assert.equal(
-      status(root).stdout,
-      'version ()\nA m.txt\nA nested/file\nA z.txt\nA \u00e9\nA \u{1F600}\n',
-    );
+    assert.deepEqual(status(root), {
+      kind: 'status',
+      version: '()',
+      rows: [
+        { code: 'A', path: 'm.txt' },
+        { code: 'A', path: 'nested/file' },
+        { code: 'A', path: 'z.txt' },
+        { code: 'A', path: '\u00e9' },
+        { code: 'A', path: '\u{1F600}' },
+      ],
+    });
   });
 
   it('works from a subdirectory of the root', () => {
     const root = repository();
     mkdirSync(join(root, 'sub/deep'), { recursive: true });
-    assert.deepEqual(status(join(root, 'sub/deep')), { stdout: 'version ()\n', stderr: '' });
+    assert.deepEqual(status(join(root, 'sub/deep')), {
+      kind: 'status',
+      version: '()',
+      rows: [],
+    });
   });
 
   it('reports the least scan offender instead of a status', () => {

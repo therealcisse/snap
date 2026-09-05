@@ -26,7 +26,7 @@ import { diffTrees, type TreeChange } from '../repo/tree.ts';
 import { diffTokens } from '../text/diff.ts';
 import { tokenize } from '../text/tokens.ts';
 
-import type { CommandOutput } from './output.ts';
+import type { CommandResult, SuccessLabel } from './output.ts';
 
 /** §7.5's message bound. A shorter limit would silently rewrite what users may say. */
 const MAX_MESSAGE_BYTES = 4096;
@@ -43,7 +43,7 @@ export function commit(
   message: string,
   cwd: string,
   env: Readonly<Record<string, string | undefined>>,
-): CommandOutput {
+): CommandResult {
   const { root, repository, replay } = loadValidatedRepository(cwd);
   const contributor = resolveContributorId(root, env);
   if (contributor === undefined) {
@@ -61,7 +61,7 @@ export function commit(
     message,
     changes: selectChanges(delta),
   };
-  return writeRepositoryVersion(root, repository, patch);
+  return writeRepositoryVersion(root, repository, patch, 'Committed');
 }
 
 /**
@@ -101,18 +101,20 @@ export function nextRevision(repository: Repository, contributor: ContributorId)
 }
 
 /**
- * Adds `patch` to the repository, replaces `repository.json`, and returns the new version as
- * the command's whole output. Metadata is written only here, after every check, so commands
- * that also touch working files can order them first (§10).
+ * Adds `patch` to the repository, replaces `repository.json`, and returns the success record
+ * for the new frontier version. Metadata is written only here, after every check, so commands
+ * that also touch working files can order them first (§10). `label` says which command is
+ * speaking — plain mode prints only the version, §7.11's terminal line adds the label.
  */
 export function writeRepositoryVersion(
   root: string,
   repository: Repository,
   patch: Patch,
-): CommandOutput {
+  label: SuccessLabel,
+): CommandResult {
   const updated = withPatch(repository, patch);
   writeRepository(root, encodeRepository(updated));
-  return { stdout: `${formatVersion(updated.frontier)}\n`, stderr: '' };
+  return { kind: 'success', label, version: formatVersion(updated.frontier) };
 }
 
 /**

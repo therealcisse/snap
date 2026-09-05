@@ -9,16 +9,18 @@ import { EMPTY_REPOSITORY_JSON } from '../repo/model.ts';
 
 import { type Context, run } from './main.ts';
 
-/** A `Context` with buffer sinks, a fresh temporary cwd, and no TTYs, plus what the sinks saw. */
-function harness(overrides: { env?: Record<string, string | undefined>; cwd?: string } = {}) {
+/** A `Context` with buffer sinks and a fresh temporary cwd, plus what the sinks saw. */
+function harness(
+  overrides: { env?: Record<string, string | undefined>; cwd?: string; tty?: boolean } = {},
+) {
   const out: string[] = [];
   const err: string[] = [];
   const ctx: Context = {
     out: { stdout: (text) => out.push(text), stderr: (text) => err.push(text) },
     env: overrides.env ?? {},
     cwd: overrides.cwd ?? mkdtempSync(join(tmpdir(), 'snap-cli-')),
-    isStdoutTty: false,
-    isStderrTty: false,
+    isStdoutTty: overrides.tty ?? false,
+    isStderrTty: overrides.tty ?? false,
   };
   return { ctx, stdout: () => out.join(''), stderr: () => err.join('') };
 }
@@ -50,10 +52,32 @@ describe('run', () => {
     assert.equal(h.stderr(), 'snap: SNAP_COLOR must be auto, always, or never\n');
   });
 
-  it('accepts a valid SNAP_COLOR and still prints plain while rendering is deferred', async () => {
+  it('renders the §7.11 terminal bytes on SNAP_COLOR=always', async () => {
     const h = harness({ env: { SNAP_COLOR: 'always' } });
     assert.equal(await run(['--version'], h.ctx), 0);
+    assert.equal(h.stdout(), '\u001b[1msnap 1.0.0\u001b[0m\n');
+  });
+
+  it('stays plain on SNAP_COLOR=never even when both streams are TTYs', async () => {
+    const h = harness({ env: { SNAP_COLOR: 'never' }, tty: true });
+    assert.equal(await run(['--version'], h.ctx), 0);
     assert.equal(h.stdout(), 'snap 1.0.0\n');
+  });
+
+  it('renders the usage error in terminal red under SNAP_COLOR=always', async () => {
+    const h = harness({ env: { SNAP_COLOR: 'always' } });
+    assert.equal(await run(['unknown'], h.ctx), 1);
+    assert.equal(h.stderr(), '\u001b[31m✗ snap: invalid command or arguments\u001b[0m\n');
+  });
+
+  it('renders the init success line in terminal mode under SNAP_COLOR=always', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
+    const h = harness({ cwd, env: { SNAP_COLOR: 'always' } });
+    assert.equal(await run(['init'], h.ctx), 0);
+    assert.equal(
+      h.stdout(),
+      '\u001b[32m✓\u001b[0m \u001b[1mInitialized repository\u001b[0m \u001b[36m()\u001b[0m\n',
+    );
   });
 
   it('reports status outside a repository as a location failure', async () => {

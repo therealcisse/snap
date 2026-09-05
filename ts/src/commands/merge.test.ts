@@ -107,9 +107,11 @@ describe('merge (SPEC §7.8, §10)', () => {
   it('imports a fresh history: writes the files, the metadata, and the joined frontier', async () => {
     const local = repository(EMPTY_REPOSITORY_JSON);
     const remote = repository(repositoryJson([['a@x', 1]], [patch('a@x', 1, [], [createF])]));
-    const output = await merge(remote, local);
-    assert.equal(output.stdout, '(a@x->1)\n');
-    assert.equal(output.stderr, '');
+    const invocation = await merge(remote, local);
+    assert.deepEqual(invocation, {
+      result: { kind: 'success', label: 'Merged', version: '(a@x->1)' },
+      warnings: [],
+    });
     assert.equal(readFileSync(join(local, 'f'), 'utf8'), 'one\n');
     const stored = decodeRepository(readFileSync(join(local, '.snap', 'repository.json'), 'utf8'));
     assert.equal(stored.patches.length, 1);
@@ -122,9 +124,11 @@ describe('merge (SPEC §7.8, §10)', () => {
     // whose delete was linear, never had.
     const local = repository(LOCAL_FORK);
     const remote = repository(REMOTE_FORK);
-    const output = await merge(remote, local);
-    assert.equal(output.stdout, '(a@x->1,b@x->1,c@x->1)\n');
-    assert.equal(output.stderr, 'warning: auto-resolved f: delete-wins\n');
+    const invocation = await merge(remote, local);
+    assert.deepEqual(invocation, {
+      result: { kind: 'success', label: 'Merged', version: '(a@x->1,b@x->1,c@x->1)' },
+      warnings: ['auto-resolved f: delete-wins'],
+    });
     // The delete won: the working tree stays empty, and the metadata holds all three patches.
     assert.equal(existsSync(join(local, 'f')), false);
     assert.equal(
@@ -141,8 +145,10 @@ describe('merge (SPEC §7.8, §10)', () => {
     // Re-merging the same operand: every dot is shared and equal, so the joined replay's
     // warnings are exactly the local replay's — the difference the command prints is empty.
     const again = await merge(remote, local);
-    assert.equal(again.stdout, '(a@x->1,b@x->1,c@x->1)\n');
-    assert.equal(again.stderr, '');
+    assert.deepEqual(again, {
+      result: { kind: 'success', label: 'Merged', version: '(a@x->1,b@x->1,c@x->1)' },
+      warnings: [],
+    });
     const stored = decodeRepository(readFileSync(join(local, '.snap', 'repository.json'), 'utf8'));
     assert.equal(stored.patches.length, 3);
   });
@@ -220,11 +226,13 @@ describe('merge (SPEC §7.8, §10)', () => {
     writeFileSync(join(local, 'f'), 'one\n');
     const before = readFileSync(join(local, '.snap', 'repository.json'), 'utf8');
     const remote = repository(EMPTY_REPOSITORY_JSON);
-    const output = await merge(remote, local);
+    const invocation = await merge(remote, local);
     // The union is the local repository itself; §7.8 still owes the write, so the metadata is
     // rewritten — the fixture's compact bytes give way to the canonical form of the same value.
-    assert.equal(output.stdout, '(a@x->1)\n');
-    assert.equal(output.stderr, '');
+    assert.deepEqual(invocation, {
+      result: { kind: 'success', label: 'Merged', version: '(a@x->1)' },
+      warnings: [],
+    });
     assert.equal(
       readFileSync(join(local, '.snap', 'repository.json'), 'utf8'),
       encodeRepository(decodeRepository(before)),

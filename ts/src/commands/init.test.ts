@@ -15,10 +15,10 @@ function cwd(): string {
 }
 
 describe('init (SPEC §7.1, tests/01, tests/02)', () => {
-  it('creates .snap/repository.json with the exact canonical bytes and prints ()', () => {
+  it('creates .snap/repository.json with the exact canonical bytes and reports the init success', () => {
     const dir = cwd();
     const output = init('.', dir);
-    assert.deepEqual(output, { stdout: '()\n', stderr: '' });
+    assert.deepEqual(output, { kind: 'success', label: 'Initialized repository', version: '()' });
     assert.equal(
       readFileSync(join(dir, SNAP_DIRECTORY, 'repository.json'), 'utf8'),
       EMPTY_REPOSITORY_JSON,
@@ -35,7 +35,7 @@ describe('init (SPEC §7.1, tests/01, tests/02)', () => {
   it('creates the target and its missing parents for a nested path', () => {
     const dir = cwd();
     const output = init('new/repository', dir);
-    assert.equal(output.stdout, '()\n');
+    assert.deepEqual(output, { kind: 'success', label: 'Initialized repository', version: '()' });
     assert.ok(existsSync(join(dir, 'new', 'repository', SNAP_DIRECTORY, 'repository.json')));
   });
 

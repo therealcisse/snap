@@ -18,7 +18,7 @@ import {
   findRepositoryRoot,
 } from '../fs/locate.ts';
 
-import type { CommandOutput } from './output.ts';
+import type { CommandResult } from './output.ts';
 
 /** Where `config` writes: the nearest repository under `cwd`, or the global file under `home`. */
 export interface ConfigScope {
@@ -34,7 +34,7 @@ export interface ConfigScope {
  * repository` for a local write outside any repository; `HOME is not set` for a global write
  * without a usable `$HOME`.
  */
-export function setContributorId(id: string, scope: ConfigScope): CommandOutput {
+export function setContributorId(id: string, scope: ConfigScope): CommandResult {
   if (!isValidContributorId(id)) {
     throw new SnapError(`invalid contributor id: ${id}`);
   }
@@ -50,5 +50,5 @@ export function setContributorId(id: string, scope: ConfigScope): CommandOutput 
     file = join(findRepositoryRoot(scope.cwd), SNAP_DIRECTORY, LOCAL_CONFIG_FILE);
   }
   writeFileSync(file, encodeConfiguration(id));
-  return { stdout: '', stderr: '' };
+  return { kind: 'config' };
 }

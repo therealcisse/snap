@@ -13,21 +13,21 @@
 import { SnapError } from '../core/errors.ts';
 import { formatVersion } from '../core/version.ts';
 import { loadValidatedRepository, resolveContributorId } from '../fs/locate.ts';
-import { installTree, writeRepository } from '../fs/materialize.ts';
+import { installTree } from '../fs/materialize.ts';
 import { scanWorkingTree } from '../fs/worktree.ts';
-import { encodeRepository, resolveKnownVersion, withPatch } from '../repo/model.ts';
+import { resolveKnownVersion } from '../repo/model.ts';
 import { materializeVersion } from '../repo/replay.ts';
 import { diffTrees } from '../repo/tree.ts';
 
-import { nextRevision, selectChanges } from './commit.ts';
+import { nextRevision, selectChanges, writeRepositoryVersion } from './commit.ts';
 
-import type { CommandOutput } from './output.ts';
+import type { CommandResult } from './output.ts';
 
 export function revert(
   version: string,
   cwd: string,
   env: Readonly<Record<string, string | undefined>>,
-): CommandOutput {
+): CommandResult {
   const { root, repository, replay } = loadValidatedRepository(cwd);
   const target = resolveKnownVersion(repository, version);
   const working = scanWorkingTree(root);
@@ -43,16 +43,19 @@ export function revert(
   if (delta.length === 0) {
     throw new SnapError('target tree is already current');
   }
-  const updated = withPatch(repository, {
-    author: contributor,
-    revision: nextRevision(repository, contributor),
-    base: repository.frontier,
-    message: `revert to ${formatVersion(target)}`,
-    changes: selectChanges(delta),
-  });
   // Working files first, metadata second (§10); a crash between the two leaves a tree the
   // metadata does not know, which the next command's validation will say loudly.
   installTree(root, replay.tree, targetTree);
-  writeRepository(root, encodeRepository(updated));
-  return { stdout: `${formatVersion(updated.frontier)}\n`, stderr: '' };
+  return writeRepositoryVersion(
+    root,
+    repository,
+    {
+      author: contributor,
+      revision: nextRevision(repository, contributor),
+      base: repository.frontier,
+      message: `revert to ${formatVersion(target)}`,
+      changes: selectChanges(delta),
+    },
+    'Reverted',
+  );
 }
