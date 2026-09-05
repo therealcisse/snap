@@ -46,10 +46,10 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 - [x] `SNAP_COLOR` / `NO_COLOR` resolution per stream with invalid-value error before execution (§7.11); unit test for `auto` TTY selection on stdout and stderr independently (§11).
 - [x] Flushed stdout/stderr writes; `process.exitCode`, never `process.exit()` after writes (§10).
 - [x] `snap init [path]` (§7.1) — `tests/01-init.yaml`, `tests/02-init-paths.yaml`.
-- [ ] `snap config [--global] contributor.id <id>` and local-over-global resolution (§7.2, §8) — `tests/03-configuration.yaml`.
+- [x] `snap config [--global] contributor.id <id>` and local-over-global resolution (§7.2, §8) — `tests/03-configuration.yaml`.
 - [x] `snap --version` (§7.10).
 - [x] Nearest-repository walk (§7).
-- [ ] `tests/14-cli-errors.yaml`, `tests/19-version-boundaries.yaml` green.
+- [x] `tests/14-cli-errors.yaml`, `tests/19-version-boundaries.yaml` green.
 
 ## Text core
 
@@ -63,23 +63,23 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 - [x] Typed `Patch`, `Change`, `Repository` decode with exact schema and canonical two-space encode with trailing LF (§4.1–§4.3).
 - [x] Canonical structural-equality serialization for dot comparison (§3.5, §4.2, §7.6).
 - [ ] Tree type with ancestor-set prefix-free check and namespace ancestor/descendant queries (§2, §6.2).
-- [ ] §4.5 steps 1–5: schema, sort order, dot uniqueness, contiguity, closure, `revision = base[author] + 1`, change-vs-base — `tests/15-repository-validation.yaml`, `tests/23-strict-validation-matrix.yaml`, `tests/27-history-canonicality.yaml`.
+- [x] §4.5 steps 1–5: schema, sort order, dot uniqueness, contiguity, closure, `revision = base[author] + 1`, change-vs-base — `tests/15-repository-validation.yaml`, `tests/23-strict-validation-matrix.yaml`, `tests/27-history-canonicality.yaml`.
 - [x] Linear-history replay (single ready patch, `I == base`) as §4.5 step 6.
 
 ## Working tree and everyday commands
 
-- [ ] Working-tree scan: `withFileTypes`, unsupported-entry failure, root `.snap` exclusion, byte-order sorted (§2, §10) — `tests/08-unsupported-entries.yaml`.
-- [ ] Delta install (deletes, prune empty dirs, mkdir, writes) and same-directory temp-file + rename for `repository.json`, working files first (§6.2, §10).
-- [ ] `snap status` (§7.3) and `snap log` with message escaping (§7.4) — `tests/04-commit-status-log.yaml`.
-- [ ] `snap commit <message>`: text/put/delete selection, 4096-byte limit, dirty-tree requirement (§7.5).
-- [ ] `snap diff` and `snap diff <old> <new>` with whole-file unified blocks, `/dev/null`, `\ No newline at end of file`, `Binary files … differ` (§7.6) — `tests/05-diff-goldens.yaml`, `tests/06-binary-and-empty.yaml`.
-- [ ] `snap revert <version>` with additive patch and `target tree is already current` error (§7.7) — `tests/07-revert.yaml`.
-- [ ] One replay per command with frontier tree and warning set reused.
-- [ ] `tests/25-config-version-path-boundaries.yaml` green.
+- [x] Working-tree scan: `withFileTypes`, unsupported-entry failure, root `.snap` exclusion, byte-order sorted (§2, §10) — `tests/08-unsupported-entries.yaml`.
+- [x] Delta install (deletes, prune empty dirs, mkdir, writes) and same-directory temp-file + rename for `repository.json`, working files first (§6.2, §10).
+- [x] `snap status` (§7.3) and `snap log` with message escaping (§7.4) — `tests/04-commit-status-log.yaml`.
+- [x] `snap commit <message>`: text/put/delete selection, 4096-byte limit, dirty-tree requirement (§7.5).
+- [x] `snap diff` and `snap diff <old> <new>` with whole-file unified blocks, `/dev/null`, `\ No newline at end of file`, `Binary files … differ` (§7.6) — `tests/05-diff-goldens.yaml`, `tests/06-binary-and-empty.yaml`.
+- [x] `snap revert <version>` with additive patch and `target tree is already current` error (§7.7) — `tests/07-revert.yaml`.
+- [x] One replay per command with frontier tree and warning set reused.
+- [x] `tests/25-config-version-path-boundaries.yaml` green.
 
 ## Concurrent replay and merge
 
-- [ ] §6.1 ready-set selection via integrated vector with Snap-order and author/revision tie-break; cycle and missing-dependency failure.
+- [x] §6.1 ready-set selection via integrated vector with Snap-order and author/revision tie-break; cycle and missing-dependency failure.
 - [ ] Exact-base materialization memo keyed by canonical version string, seeded by snapshotting known-base states, with `I == base` shortcut; unit test asserting materialize calls ≤ P+1 on a three-contributor concurrent history.
 - [ ] §6.2 rules 1–4 with namespace rule applied before per-path rules.
 - [ ] §6.4 winner table and sorted unique warning set — `tests/10-merge-conflicts.yaml`, `tests/11-namespace-conflicts.yaml`, `tests/17-concurrent-creates.yaml`.
