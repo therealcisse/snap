@@ -100,7 +100,7 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 
 ## Hardening and performance
 
-- [ ] Property test: random valid causal patch graphs; import-permutation invariance of frontier, patch set, warnings, and tree bytes (§11).
-- [ ] Startup profile under the harness's cold `TMPDIR`; module graph kept small.
-- [ ] Scale smoke outside the suite (1 000-patch linear history, 100-file tree, 2 000-line diff) recorded as a research note.
+- [x] Property test: random valid causal patch graphs; import-permutation invariance of frontier, patch set, warnings, and tree bytes (§11).
+- [x] Startup profile under the harness's cold `TMPDIR`; module graph kept small.
+- [x] Scale smoke outside the suite (1 000-patch linear history, 100-file tree, 2 000-line diff) recorded as a research note.
 - [ ] Full `./verify --lang ts` green; `npm run build` clean; `cd test-harness && npm run check && npm test` unchanged.
