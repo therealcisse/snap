@@ -42,13 +42,13 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 
 ## CLI skeleton and configuration
 
-- [ ] Positional grammar with at-most-once options and unknown/extra/missing errors (§7) — `tests/24-cli-grammar-matrix.yaml`.
-- [ ] `SNAP_COLOR` / `NO_COLOR` resolution per stream with invalid-value error before execution (§7.11); unit test for `auto` TTY selection on stdout and stderr independently (§11).
-- [ ] Flushed stdout/stderr writes; `process.exitCode`, never `process.exit()` after writes (§10).
-- [ ] `snap init [path]` (§7.1) — `tests/01-init.yaml`, `tests/02-init-paths.yaml`.
+- [x] Positional grammar with at-most-once options and unknown/extra/missing errors (§7) — `tests/24-cli-grammar-matrix.yaml`.
+- [x] `SNAP_COLOR` / `NO_COLOR` resolution per stream with invalid-value error before execution (§7.11); unit test for `auto` TTY selection on stdout and stderr independently (§11).
+- [x] Flushed stdout/stderr writes; `process.exitCode`, never `process.exit()` after writes (§10).
+- [x] `snap init [path]` (§7.1) — `tests/01-init.yaml`, `tests/02-init-paths.yaml`.
 - [ ] `snap config [--global] contributor.id <id>` and local-over-global resolution (§7.2, §8) — `tests/03-configuration.yaml`.
-- [ ] `snap --version` (§7.10).
-- [ ] Nearest-repository walk (§7).
+- [x] `snap --version` (§7.10).
+- [x] Nearest-repository walk (§7).
 - [ ] `tests/14-cli-errors.yaml`, `tests/19-version-boundaries.yaml` green.
 
 ## Text core
