@@ -265,4 +265,21 @@ describe('assertNoPatchCollisions (SPEC §4.2, §7.6, §7.8)', () => {
     );
     assertNoPatchCollisions(local, remote);
   });
+
+  it('rejects a differing message, edit, or content on a shared dot', () => {
+    const left = repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [createF])]);
+    const differings = [
+      { ...patch('a@x', 1, [], [createF]), message: 'different' },
+      patch('a@x', 1, [], [{ type: 'text', path: 'f', edit: [{ insert: ['uno\n'] }] }]),
+      patch('a@x', 1, [], [{ type: 'put', path: 'f', content: 'YQI=' }]),
+    ];
+    for (const differing of differings) {
+      assert.throws(
+        () => {
+          assertNoPatchCollisions(left, repositoryOf([['a@x', 1]], [differing]));
+        },
+        { message: 'patch collision: a@x revision 1' },
+      );
+    }
+  });
 });

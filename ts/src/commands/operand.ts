@@ -1,10 +1,10 @@
 /**
  * The repository operand of the cross-repository commands (SPEC §7.8, §9).
  *
- * `merge` takes one operand — a local path to a repository root or an exact
- * `http(s)://…/repository.json` URL. This module is the single place that classifies and
- * resolves it, so every command that names another repository reads the same rule instead of
- * each growing its own.
+ * `merge` and `diff --repo` each take one repository operand — a local path to a repository
+ * root or an exact `http(s)://…/repository.json` URL. This module is the single place that
+ * classifies and resolves it, so every command that names another repository reads the same
+ * rule instead of each growing its own.
  */
 import { resolve } from 'node:path';
 

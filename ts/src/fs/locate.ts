@@ -72,12 +72,13 @@ export interface LoadedRepository {
 /**
  * Decodes and validates the `repository.json` of exactly `root` — no nearest-walk (SPEC §4.5).
  *
- * The remote operand of `merge` (SPEC §7.8) must itself be a repository root, so unlike
- * `loadValidatedRepository` there is no walk: a directory that merely lies inside some enclosing
- * repository does not qualify. Throws `not a Snap repository` when `root`'s `repository.json`
- * cannot be read, the decoder's `SnapError` when the file is malformed, and the validator's
- * `SnapError` when the history is invalid — before any command mutates anything, because every
- * repository command owes its checks first (§7.6, §10).
+ * The loader a repository operand uses (SPEC §7): `merge`'s remote (§7.8) and `diff --repo`'s
+ * operand name the repository root itself, so unlike `loadValidatedRepository` there is no
+ * walk: a directory that merely lies inside some enclosing repository does not qualify. Throws
+ * `not a Snap repository` when `root`'s `repository.json` cannot be read, the decoder's
+ * `SnapError` when the file is malformed, and the validator's `SnapError` when the history is
+ * invalid — before any command mutates anything, because every repository command owes its
+ * checks first (§7.6, §10).
  */
 export function loadRepositoryAtRoot(root: string): LoadedRepository {
   let text: string;

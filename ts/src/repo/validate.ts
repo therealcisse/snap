@@ -8,6 +8,10 @@
  * would materialize every tree twice. The frontier match runs last, after replay, because a
  * frontier gap and a cyclic history can describe the same broken repository and the spec's
  * error ordering (§4.5, pinned by the acceptance suite) attributes it to replay first.
+ *
+ * The cross-repository dot check (§7.6) also lives here because it is validation over decoded
+ * values, not replay: `assertNoPatchCollisions` is the gate both `diff --repo` and `merge`'s
+ * dot-keyed union (§7.8) owe before trusting a shared history across two repositories.
  */
 import { compareBytes } from '../core/bytes.ts';
 import { SnapError } from '../core/errors.ts';

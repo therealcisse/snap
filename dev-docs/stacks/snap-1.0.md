@@ -89,9 +89,9 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 
 ## HTTP
 
-- [ ] `snap --serve [port]` on 127.0.0.1 with GET/HEAD `/repository.json`, 404, 405 with `Allow`, plain flushed startup URL, SIGINT/SIGTERM exit 0 (§7.9, §9) — `tests/12-http-server.yaml`.
+- [x] `snap --serve [port]` on 127.0.0.1 with GET/HEAD `/repository.json`, 404, 405 with `Allow`, plain flushed startup URL, SIGINT/SIGTERM exit 0 (§7.9, §9) — `tests/12-http-server.yaml`.
 - [ ] HTTP repository operand: single GET, status 200 required, no redirects, strict parse (§9) — `tests/13-http-client.yaml`.
-- [ ] `snap diff <old> <new> --repo <repository>` local and HTTP with cross-repository dot check (§7.6).
+- [x] `snap diff <old> <new> --repo <repository>` local and HTTP with cross-repository dot check (§7.6).
 - [ ] `snap merge <url>` (§7.8).
 
 ## Terminal presentation

@@ -4,15 +4,16 @@
  * This is the only module in `src/` that writes to the process's standard streams. Commands are
  * pure — parsed arguments in, an output record out — so `run` is where an invocation becomes
  * writes and an exit status; `serve` is the one exception, a long-running command that prints
- * its own startup line. The record may take a moment to arrive — `merge`'s operand can be a §9
- * URL — so `execute` returns a promise `run` awaits before emitting. Writes are synchronous so
- * the entire output is flushed before the process ends, even when stdout is a pipe (SPEC §10).
+ * its own startup line. The record may take a moment to arrive — a `merge` or `diff --repo`
+ * operand can be a §9 URL — so `execute` returns a promise `run` awaits before emitting.
+ * Writes are synchronous so the entire output is flushed before the process ends, even when
+ * stdout is a pipe (SPEC §10).
  */
 import { writeSync } from 'node:fs';
 
 import { commit } from '../commands/commit.ts';
 import { setContributorId } from '../commands/config.ts';
-import { diffVersions, diffWorktree } from '../commands/diff.ts';
+import { diffCrossRepository, diffVersions, diffWorktree } from '../commands/diff.ts';
 import { init } from '../commands/init.ts';
 import { log } from '../commands/log.ts';
 import { merge } from '../commands/merge.ts';
@@ -20,7 +21,7 @@ import { revert } from '../commands/revert.ts';
 import { serve } from '../commands/serve.ts';
 import { status } from '../commands/status.ts';
 import { showVersion } from '../commands/version.ts';
-import { SnapError, describeFailure } from '../core/errors.ts';
+import { describeFailure } from '../core/errors.ts';
 
 import { type Command, parseArgs } from './args.ts';
 import { resolveModes } from './presentation.ts';
@@ -54,7 +55,7 @@ export async function run(argv: readonly string[], ctx: Context): Promise<number
     if (command.kind === 'serve') {
       return await serve(command.port, ctx.cwd, ctx.out.stdout);
     }
-    emit(await execute(command, argv, ctx), ctx);
+    emit(await execute(command, ctx), ctx);
     return 0;
   } catch (failure: unknown) {
     const { exitCode, line } = describeFailure(failure);
@@ -71,14 +72,14 @@ export function fdOutput(): Output {
   };
 }
 
-/** The commands that speak in `CommandOutput`s; serve runs above. */
+/**
+ * The commands that speak in `CommandOutput`s; serve runs above. `diff --repo` and `merge` are
+ * the ones that await — their operands can be HTTP URLs (§9), asynchronous command input — so
+ * dispatch is async while every other command body stays a synchronous call.
+ */
 type ImmediateCommand = Exclude<Command, { kind: 'serve' }>;
 
-async function execute(
-  command: ImmediateCommand,
-  argv: readonly string[],
-  ctx: Context,
-): Promise<CommandOutput> {
+async function execute(command: ImmediateCommand, ctx: Context): Promise<CommandOutput> {
   switch (command.kind) {
     case 'showVersion':
       return showVersion();
@@ -99,10 +100,8 @@ async function execute(
     case 'diffWorktree':
       return diffWorktree(ctx.cwd);
     case 'diff':
-      // The cross-repository form stays unimplemented; the boundary reports it with the
-      // invocation's own words, as the not-implemented lines have always read (tests/24).
       if (command.repo !== undefined) {
-        return notImplemented(argv);
+        return diffCrossRepository(command.oldVersion, command.newVersion, ctx.cwd, command.repo);
       }
       return diffVersions(command.oldVersion, command.newVersion, ctx.cwd);
     case 'revert':
@@ -110,11 +109,6 @@ async function execute(
     case 'merge':
       return merge(command.repository, ctx.cwd);
   }
-}
-
-/** The standing failure for command bodies that have not landed yet. */
-function notImplemented(argv: readonly string[]): never {
-  throw new SnapError(`not implemented: ${argv.join(' ')}`);
 }
 
 function emit(output: CommandOutput, ctx: Context): void {

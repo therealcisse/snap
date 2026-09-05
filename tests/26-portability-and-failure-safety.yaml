@@ -56,6 +56,33 @@ steps:
         value: {format: 1, frontier: [], patches: []}
       - {type: path_not_exists, path: local/crlf.txt}
 
+  # §7.6: `old` resolves in the local repository, `new` in the operand — so a version the
+  # operand has never seen still diffs. `local` must stay empty for the no-mutation asserts
+  # below, so a second local repository carries the locally-known version.
+  - run:
+      args: [init, local2]
+      expect: [{type: exit_code, value: 0}]
+  - run:
+      cwd: local2
+      args: [config, contributor.id, local2@x]
+      expect: [{type: exit_code, value: 0}]
+  - write_file: {path: local2/only-local.txt, text: "here\n"}
+  - run:
+      cwd: local2
+      args: [commit, local-only]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "(local2@x->1)\n"}
+        - {type: stderr_equals, value: ""}
+  - run:
+      cwd: local2
+      args: [diff, "(local2@x->1)", "(remote@x->1)", --repo, ../remote]
+      expect:
+        - {type: exit_code, value: 0}
+        - type: stdout_equals
+          value: "--- /dev/null\n+++ b/crlf.txt\n@@ -1,0 +1,2 @@\n+a\r\n+b\n\\ No newline at end of file\nBinary files /dev/null and b/nul.bin differ\n--- a/only-local.txt\n+++ /dev/null\n@@ -1,1 +1,0 @@\n-here\n--- /dev/null\n+++ b/unicode.txt\n@@ -1,0 +1,1 @@\n+hé\n"
+        - {type: stderr_equals, value: ""}
+
   - run:
       args: [init, malformed]
       expect: [{type: exit_code, value: 0}]

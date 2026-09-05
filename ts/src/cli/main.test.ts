@@ -96,12 +96,12 @@ describe('run', () => {
     assert.equal(h.stderr(), 'snap: invalid version: (a@x->01)\n');
   });
 
-  it('keeps the cross-repository diff not implemented', async () => {
+  it('reports a diff --repo operand that is not a repository root', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
     emptyRepository(cwd);
     const h = harness({ cwd });
     assert.equal(await run(['diff', '()', '()', '--repo', 'other'], h.ctx), 1);
-    assert.equal(h.stderr(), 'snap: not implemented: diff () () --repo other\n');
+    assert.equal(h.stderr(), 'snap: not a Snap repository\n');
   });
 
   it('runs merge through the dispatch and reports the joined frontier', async () => {
