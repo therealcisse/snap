@@ -60,11 +60,11 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 
 ## Repository model and validation
 
-- [ ] Typed `Patch`, `Change`, `Repository` decode with exact schema and canonical two-space encode with trailing LF (§4.1–§4.3).
-- [ ] Canonical structural-equality serialization for dot comparison (§3.5, §4.2, §7.6).
+- [x] Typed `Patch`, `Change`, `Repository` decode with exact schema and canonical two-space encode with trailing LF (§4.1–§4.3).
+- [x] Canonical structural-equality serialization for dot comparison (§3.5, §4.2, §7.6).
 - [ ] Tree type with ancestor-set prefix-free check and namespace ancestor/descendant queries (§2, §6.2).
 - [ ] §4.5 steps 1–5: schema, sort order, dot uniqueness, contiguity, closure, `revision = base[author] + 1`, change-vs-base — `tests/15-repository-validation.yaml`, `tests/23-strict-validation-matrix.yaml`, `tests/27-history-canonicality.yaml`.
-- [ ] Linear-history replay (single ready patch, `I == base`) as §4.5 step 6.
+- [x] Linear-history replay (single ready patch, `I == base`) as §4.5 step 6.
 
 ## Working tree and everyday commands
 
