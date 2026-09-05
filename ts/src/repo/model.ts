@@ -18,12 +18,7 @@ import {
   versionFromPairs,
   versionKey,
 } from '../core/version.ts';
-
-/** One operation of an edit script (SPEC §4.4). Counts are positive safe integers. */
-export type EditOp =
-  | { readonly retain: number }
-  | { readonly delete: number }
-  | { readonly insert: readonly string[] };
+import { type EditOp } from '../text/edit.ts';
 
 /** Creates a text file or edits one in place (SPEC §4.3). An empty `edit` creates an empty file. */
 export interface TextChange {
