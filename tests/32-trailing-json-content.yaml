@@ -1,0 +1,51 @@
+format: 1
+name: repository JSON is exactly one value and rejects trailing or truncated bytes
+description: >
+  SPEC §4.1 and §8. A file is one JSON value optionally surrounded by
+  whitespace; a truncated value or any other byte after the value is malformed
+  and reported as `invalid JSON`. The rejected alternative was a lenient reader
+  that consumes the first complete value and ignores the rest; it was
+  considered because `tests/03` line 70 appears to write two extra braces, but
+  that spelling is the harness's `}}}}` escape for a literal `}}`, so no
+  existing case depended on leniency. The `}}}}}}}}` below therefore reaches
+  the candidate as four braces: the object's closing brace and three extra.
+  The final step shows that a trailing LF, being whitespace, is accepted.
+steps:
+  - run:
+      args: [init, repo]
+      expect: [{type: exit_code, value: 0}]
+
+  # Extra closing braces after a complete value.
+  - write_file:
+      path: repo/.snap/repository.json
+      text: '{"format":1,"frontier":[],"patches":[]}}}}}}}}'
+  - run:
+      cwd: repo
+      args: [status]
+      expect: &invalid_json
+        - {type: exit_code, value: 1}
+        - {type: stdout_equals, value: ""}
+        - {type: stderr_matches, pattern: '^snap: invalid JSON.*\n$'}
+
+  # Truncated value: the closing brace is missing.
+  - write_file:
+      path: repo/.snap/repository.json
+      text: '{"format":1,"frontier":[],"patches":[]'
+  - run: {cwd: repo, args: [status], expect: *invalid_json}
+
+  - write_file:
+      path: repo/.snap/repository.json
+      text: not json
+  - run: {cwd: repo, args: [status], expect: *invalid_json}
+
+  # Surrounding whitespace is ordinary JSON whitespace and is accepted.
+  - write_file:
+      path: repo/.snap/repository.json
+      text: "{\"format\":1,\"frontier\":[],\"patches\":[]}\n"
+  - run:
+      cwd: repo
+      args: [status]
+      expect:
+        - {type: exit_code, value: 0}
+        - {type: stdout_equals, value: "version ()\n"}
+        - {type: stderr_equals, value: ""}

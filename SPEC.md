@@ -190,12 +190,14 @@ Every repository has this interoperable layout:
 ```
 
 The example is pretty-printed for readability. Readers accept ordinary JSON
-whitespace and object-key order. Valid input has unique object keys. The parsed
-typed value—not its serialized bytes—is authoritative, with one exception: a
-JSON number is an **integer** only when its source lexeme has no fraction and
-no exponent, that is, matches `-?(0|[1-9][0-9]*)`. `1.0`, `1e0`, and `1.5` are
-all non-integer numbers. Writers SHOULD use two-space indentation and a
-trailing LF so repositories remain pleasant to inspect.
+whitespace and object-key order. A file or body is exactly one JSON value
+optionally surrounded by whitespace; a truncated value or any other byte after
+the value is malformed. Valid input has unique object keys. The parsed typed
+value—not its serialized bytes—is authoritative, with one exception: a JSON
+number is an **integer** only when its source lexeme has no fraction and no
+exponent, that is, matches `-?(0|[1-9][0-9]*)`. `1.0`, `1e0`, and `1.5` are all
+non-integer numbers. Writers SHOULD use two-space indentation and a trailing LF
+so repositories remain pleasant to inspect.
 
 Unknown fields, non-integer numbers where an integer is expected, and invalid
 typed values are errors. `patches` contains exactly the causal closure of
@@ -681,7 +683,8 @@ Snap reads and validates local `.snap/config.json` first. If it provides an ID,
 Snap does not read global configuration. Otherwise it reads
 `$HOME/.snapconfig.json`. A missing file means no value; a malformed file,
 non-unique or unknown field, or invalid ID in a file that is read is an error.
-If `$HOME` is absent, global configuration is unavailable.
+Trailing bytes after the configuration value are malformed (§4.1). If `$HOME`
+is absent, global configuration is unavailable.
 
 Only `commit` and `revert` author patches and therefore require an ID. If it is
 missing they fail with:
