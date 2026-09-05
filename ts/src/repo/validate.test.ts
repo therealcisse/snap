@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { decodeUtf8 } from '../core/bytes.ts';
 
 import { type Repository, decodeRepository } from './model.ts';
-import { validateRepository } from './validate.ts';
+import { assertNoPatchCollisions, validateRepository } from './validate.ts';
 
 type RawPatch = Record<string, unknown>;
 
@@ -175,5 +175,94 @@ describe('validateRepository: replay orchestration', () => {
         ),
       { message: 'delete of absent path: f' },
     );
+  });
+});
+
+describe('assertNoPatchCollisions (SPEC §4.2, §7.6, §7.8)', () => {
+  it('accepts structurally equal shared dots and ignores dots only one side has', () => {
+    const local = repositoryOf(
+      [
+        ['a@x', 1],
+        ['b@x', 1],
+      ],
+      [
+        patch('a@x', 1, [], [createF]),
+        patch('b@x', 1, [['a@x', 1]], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+      ],
+    );
+    const remote = repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [createF])]);
+    assertNoPatchCollisions(local, remote);
+  });
+
+  it('reports the byte-order-first differing dot', () => {
+    // a@x->1 agrees; a@x->2 and b@x->1 both differ. The walk reports a@x revision 2 — the
+    // byte-order-first collision — never b@x, whichever side's array it started from.
+    const shared = [patch('a@x', 1, [], [createF])];
+    const local = repositoryOf(
+      [
+        ['a@x', 2],
+        ['b@x', 1],
+      ],
+      [
+        ...shared,
+        patch(
+          'a@x',
+          2,
+          [['a@x', 1]],
+          [{ type: 'text', path: 'f', edit: [{ retain: 1 }, { insert: ['two\n'] }] }],
+        ),
+        patch('b@x', 1, [['a@x', 2]], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+      ],
+    );
+    const remote = repositoryOf(
+      [
+        ['a@x', 2],
+        ['b@x', 1],
+      ],
+      [
+        ...shared,
+        patch(
+          'a@x',
+          2,
+          [['a@x', 1]],
+          [{ type: 'text', path: 'f', edit: [{ retain: 1 }, { insert: ['other\n'] }] }],
+        ),
+        patch('b@x', 1, [['a@x', 2]], [{ type: 'put', path: 'g', content: 'AQ==' }]),
+      ],
+    );
+    assert.throws(
+      () => {
+        assertNoPatchCollisions(local, remote);
+      },
+      { message: 'patch collision: a@x revision 2' },
+    );
+  });
+
+  it('treats the parsed typed value, not the JSON spelling, as identity', () => {
+    // tests/26's duplicate-left/right shape: the remote spells the shared patch with a
+    // different key order and spacing, and the decoded values agree, so no collision.
+    const local = repositoryOf(
+      [['same@x', 1]],
+      [patch('same@x', 1, [], [{ type: 'text', path: 'f', edit: [{ insert: ['same\n'] }] }])],
+    );
+    const remote = decodeRepository(
+      // `JSON.stringify` writes the object's key order verbatim, so this document spells the
+      // shared patch inside-out relative to the encoder's `author, revision, base, message,
+      // changes` — and re-escapes the LF token correctly, which a hand-written literal cannot.
+      JSON.stringify({
+        patches: [
+          {
+            changes: [{ edit: [{ insert: ['same\n'] }], path: 'f', type: 'text' }],
+            message: 'm',
+            base: [],
+            revision: 1,
+            author: 'same@x',
+          },
+        ],
+        frontier: [['same@x', 1]],
+        format: 1,
+      }),
+    );
+    assertNoPatchCollisions(local, remote);
   });
 });

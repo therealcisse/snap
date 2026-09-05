@@ -11,6 +11,7 @@ import {
   decodeConfiguration,
   encodeConfiguration,
   findRepositoryRoot,
+  loadRepositoryAtRoot,
   loadValidatedRepository,
   nearestRepository,
   resolveContributorId,
@@ -164,6 +165,23 @@ describe('loadValidatedRepository', () => {
     assert.throws(() => loadValidatedRepository(cyclic), {
       message: 'revision does not follow base: a@x->1',
     });
+  });
+});
+
+describe('loadRepositoryAtRoot (SPEC §7.8: merge remote operands are roots, not subtrees)', () => {
+  it('loads the repository of exactly the given root', () => {
+    const root = repository();
+    const loaded = loadRepositoryAtRoot(root);
+    assert.equal(loaded.root, root);
+    assert.deepEqual(loaded.repository, { format: 1, frontier: [], patches: [] });
+    assert.deepEqual(loaded.replay.tree, new Map());
+  });
+
+  it('does not walk: a directory merely inside a repository is not a root', () => {
+    const root = repository();
+    const inside = join(root, 'sub');
+    mkdirSync(inside);
+    assert.throws(() => loadRepositoryAtRoot(inside), { message: 'not a Snap repository' });
   });
 });
 

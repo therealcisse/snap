@@ -33,8 +33,10 @@ strict JSON), `text/` (tokens, edit scripts, diff, transform), `repo/` (model,
 tree, validate, replay), `fs/` (locate, worktree, materialize), `http/`
 (snapshot server, repository client), `commands/` (one file per command, pure:
 arguments in, output record out — `serve.ts` is the one sanctioned exception:
-long-running, prints its own startup URL, resolves when a signal ends it),
-`cli/` (args, presentation, main). Unit tests are colocated as
+long-running, prints its own startup URL, resolves when a signal ends it; a body
+may return `Promise<CommandOutput>` when its operand needs the async §9 HTTP
+client, as `merge`'s can), `cli/` (args, presentation, main; `execute` awaits
+the promise so emission stays synchronous). Unit tests are colocated as
 `src/**/*.test.ts`.
 
 ## Conventions

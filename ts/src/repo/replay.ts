@@ -135,10 +135,10 @@ export function replayRepository(repository: Repository, hooks?: ReplayHooks): R
  * The tree a known `version` selects (SPEC §6.1): every patch `(c, n)` with `n <= version[c]`,
  * replayed together. `diff` and `revert` materialize old versions and revert targets here.
  *
- * The caller must pass a repository that already passed `validateRepository` and a version in
- * `knownVersionKeys` — the checks every command owes before naming a version. Warnings of the
- * selected subset's own integrations are discarded: this is materialization, not a top-level
- * replay, and only the tree is asked for.
+ * The caller must pass a repository that already passed `validateRepository` and a version
+ * `isKnownVersion` accepts — the checks every command owes before naming a version. Warnings
+ * of the selected subset's own integrations are discarded: this is materialization, not a
+ * top-level replay, and only the tree is asked for.
  */
 export function materializeVersion(repository: Repository, version: Version): Tree {
   const core: ReplayCore = {

@@ -13,7 +13,7 @@ import { compareBytes } from '../core/bytes.ts';
 import { SnapError } from '../core/errors.ts';
 import { componentOf } from '../core/version.ts';
 
-import { type Patch, type Repository } from './model.ts';
+import { encodePatch, type Patch, type Repository } from './model.ts';
 import { type ReplayResult, replayRepository } from './replay.ts';
 
 /**
@@ -28,6 +28,34 @@ export function validateRepository(repository: Repository): ReplayResult {
   const replayed = replayRepository(repository);
   checkFrontier(repository);
   return replayed;
+}
+
+/**
+ * Cross-repository dot comparison (SPEC §4.2, §7.6, §7.8): every dot present in both
+ * repositories must carry structurally equal patches. The same dot with different values is
+ * corruption, not a merge conflict (§3.5), so `merge` and the cross-repository `diff` both
+ * fail here — before any output or mutation.
+ *
+ * Structural equality is `encodePatch` string equality: the parsed typed value, not its JSON
+ * spelling, is authoritative (§4.1), so one patch written under a different key order or
+ * whitespace still agrees. Both repositories must already have passed `validateRepository`;
+ * the walk below runs in `local`'s validated (author, revision) order, which makes the first
+ * differing shared dot also the byte-order-first one. Pinned message (tests/16):
+ * `patch collision: <author> revision <n>`.
+ */
+export function assertNoPatchCollisions(local: Repository, remote: Repository): void {
+  const remoteDots = new Map(remote.patches.map((p) => [dotKey(p), encodePatch(p)]));
+  for (const patch of local.patches) {
+    const remoteEncoding = remoteDots.get(dotKey(patch));
+    if (remoteEncoding !== undefined && remoteEncoding !== encodePatch(patch)) {
+      throw new SnapError(`patch collision: ${patch.author} revision ${String(patch.revision)}`);
+    }
+  }
+}
+
+/** `author->revision`; §3.1 forbids `->` in contributor IDs, so the key is unambiguous. */
+function dotKey(patch: Patch): string {
+  return `${patch.author}->${String(patch.revision)}`;
 }
 
 /**

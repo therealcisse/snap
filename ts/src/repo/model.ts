@@ -14,11 +14,11 @@ import { JsonCursor, parseJson } from '../core/json.ts';
 import {
   type ContributorId,
   type Version,
-  EMPTY_VERSION,
+  compareVersions,
+  componentOf,
   isValidContributorId,
   parseVersion,
   versionFromPairs,
-  versionKey,
 } from '../core/version.ts';
 import { type EditOp } from '../text/edit.ts';
 
@@ -73,16 +73,30 @@ export interface Repository {
 export const EMPTY_REPOSITORY_JSON = '{\n  "format": 1,\n  "frontier": [],\n  "patches": []\n}\n';
 
 /**
- * Every version this repository locally knows, as `versionKey` strings: the empty tree's `()`
- * plus each patch's result version (SPEC §4.2, §7.6). Commands use it to reject operands naming
- * versions no patch ever produced.
+ * Whether `version` is locally known (SPEC §1.1 invariant 4, §7.6): the repository contains
+ * every dot the version names, and every patch the version selects — `(c, n)` with
+ * `n <= version[c]` — has a base the version already contains, so the selection replays from
+ * the empty tree and the version is reproducible.
+ *
+ * Patch results satisfy this by construction, and so does a merge's joined frontier (§7.8)
+ * even though no single patch produces it (tests/21). A dangling revision, or a version that
+ * keeps a patch while dropping a dot its base depends on, is not reproducible and not known.
  */
-export function knownVersionKeys(repository: Repository): ReadonlySet<string> {
-  const keys = new Set<string>([versionKey(EMPTY_VERSION)]);
-  for (const patch of repository.patches) {
-    keys.add(versionKey(resultVersion(patch)));
+export function isKnownVersion(repository: Repository, version: Version): boolean {
+  for (const [id, revision] of version) {
+    if (!repository.patches.some((patch) => patch.author === id && patch.revision === revision)) {
+      return false;
+    }
   }
-  return keys;
+  for (const patch of repository.patches) {
+    if (componentOf(version, patch.author) >= patch.revision) {
+      const relation = compareVersions(patch.base, version);
+      if (relation === 'after' || relation === 'concurrent') {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 /**
@@ -91,11 +105,12 @@ export function knownVersionKeys(repository: Repository): ReadonlySet<string> {
  * here so syntax and knownness are checked in one place, before any output is produced (§7.6).
  *
  * Throws `SnapError('invalid version: <text>')` for a non-canonical operand and
- * `SnapError('unknown version: <text>')` for a well-formed one no patch ever produced.
+ * `SnapError('unknown version: <text>')` for a well-formed one the repository cannot
+ * reproduce.
  */
 export function resolveKnownVersion(repository: Repository, text: string): Version {
   const version = parseVersion(text);
-  if (!knownVersionKeys(repository).has(versionKey(version))) {
+  if (!isKnownVersion(repository, version)) {
     throw new SnapError(`unknown version: ${text}`);
   }
   return version;
