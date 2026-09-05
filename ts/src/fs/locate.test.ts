@@ -11,7 +11,7 @@ import {
   decodeConfiguration,
   encodeConfiguration,
   findRepositoryRoot,
-  loadRepository,
+  loadValidatedRepository,
   nearestRepository,
   resolveContributorId,
 } from './locate.ts';
@@ -119,20 +119,51 @@ describe('nearestRepository and findRepositoryRoot (SPEC §7)', () => {
   });
 });
 
-describe('loadRepository', () => {
-  it('loads and decodes the nearest repository.json', () => {
+describe('loadValidatedRepository', () => {
+  it('locates, decodes, and replays the nearest repository from any depth', () => {
     const root = repository();
-    assert.deepEqual(loadRepository(join(root, 'sub-not-created')), {
+    const loaded = loadValidatedRepository(join(root, 'sub-not-created'));
+    assert.deepEqual(loaded.repository, {
       format: 1,
       frontier: [],
       patches: [],
     });
+    assert.equal(loaded.root, root);
+    assert.deepEqual(loaded.replay.tree, new Map());
+    assert.deepEqual(loaded.replay.sequence, []);
   });
 
   it('reports a .snap directory without a readable repository.json as not a repository', () => {
     const root = directory();
     mkdirSync(join(root, SNAP_DIRECTORY));
-    assert.throws(() => loadRepository(root), { message: 'not a Snap repository' });
+    assert.throws(() => loadValidatedRepository(root), { message: 'not a Snap repository' });
+  });
+
+  it('passes decoder and validator failures through unchanged', () => {
+    const root = repository();
+    writeFileSync(join(root, SNAP_DIRECTORY, 'repository.json'), 'not json');
+    assert.throws(() => loadValidatedRepository(root), { message: /^invalid JSON: / });
+
+    const cyclic = repository();
+    writeFileSync(
+      join(cyclic, SNAP_DIRECTORY, 'repository.json'),
+      JSON.stringify({
+        format: 1,
+        frontier: [],
+        patches: [
+          {
+            author: 'a@x',
+            revision: 1,
+            base: [['a@x', 1]],
+            message: 'self',
+            changes: [{ type: 'put', path: 'f', content: 'YQ==' }],
+          },
+        ],
+      }),
+    );
+    assert.throws(() => loadValidatedRepository(cyclic), {
+      message: 'revision does not follow base: a@x->1',
+    });
   });
 });
 

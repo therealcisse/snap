@@ -13,6 +13,8 @@ import { SnapError } from '../core/errors.ts';
 import { JsonCursor, parseJson } from '../core/json.ts';
 import { type ContributorId, isValidContributorId } from '../core/version.ts';
 import { type Repository, decodeRepository } from '../repo/model.ts';
+import { type ReplayResult } from '../repo/replay.ts';
+import { validateRepository } from '../repo/validate.ts';
 
 /** The directory that marks a repository root and holds its metadata (SPEC §2). */
 export const SNAP_DIRECTORY = '.snap';
@@ -57,12 +59,25 @@ export function findRepositoryRoot(startDir: string): string {
 }
 
 /**
- * Loads and validates the `repository.json` of the nearest repository.
+ * A repository as one command needs it: where it lives, its decoded value, and its one replay —
+ * the frontier tree, warnings, and integration order that `status`, `commit`, `diff`, `log`, and
+ * `revert` all consume. One field, one replay: no command re-replays what another already did.
+ */
+export interface LoadedRepository {
+  readonly root: string;
+  readonly repository: Repository;
+  readonly replay: ReplayResult;
+}
+
+/**
+ * Locates, decodes, and validates the nearest repository's `repository.json` (SPEC §4.5).
  *
  * Throws `not a Snap repository` when there is no enclosing repository or the found root's
- * `repository.json` cannot be read, and the decoder's `SnapError` when the file is malformed.
+ * `repository.json` cannot be read, the decoder's `SnapError` when the file is malformed, and
+ * the validator's `SnapError` when the history is invalid — before any command mutates
+ * anything, because every repository command owes its checks first (§7.6, §10).
  */
-export function loadRepository(startDir: string): Repository {
+export function loadValidatedRepository(startDir: string): LoadedRepository {
   const root = findRepositoryRoot(startDir);
   let text: string;
   try {
@@ -72,7 +87,8 @@ export function loadRepository(startDir: string): Repository {
     // as a location failure, keeping the vocabulary at two cases: outside one, or unreadable.
     throw new SnapError('not a Snap repository');
   }
-  return decodeRepository(text);
+  const repository = decodeRepository(text);
+  return { root, repository, replay: validateRepository(repository) };
 }
 
 /**

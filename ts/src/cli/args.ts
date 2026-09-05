@@ -6,7 +6,7 @@
  * occur exactly in the positions §7 shows, at most once, and anything unexpected — an unknown
  * command or option, an extra operand, a missing option value — is one uniform error. The diff
  * family is the single exception: it fails with its own usage line so the error can teach diff's
- * two-operand shape (tests/14).
+ * shapes — zero operands or exactly two (§7.6), never one (tests/14).
  */
 import { SnapError } from '../core/errors.ts';
 
@@ -17,6 +17,7 @@ export type Command =
   | { readonly kind: 'status' }
   | { readonly kind: 'log' }
   | { readonly kind: 'commit'; readonly message: string }
+  | { readonly kind: 'diffWorktree' }
   | {
       readonly kind: 'diff';
       readonly oldVersion: string;
@@ -95,8 +96,14 @@ function parseConfig(rest: readonly string[]): Command {
   return { kind: 'config', global, id: tokens[1] ?? invalid() };
 }
 
-/** `diff <old> <new> [--repo <repository>]`: the one command with its own usage error (§7.6). */
+/**
+ * `diff [<old> <new> [--repo <repository>]]`: the one command with its own usage error (§7.6).
+ * Zero operands select the working-tree comparison; anything past two must be the one option.
+ */
 function parseDiff(rest: readonly string[]): Command {
+  if (rest.length === 0) {
+    return { kind: 'diffWorktree' };
+  }
   const [oldVersion, newVersion, ...tail] = rest;
   if (oldVersion === undefined || newVersion === undefined) {
     throw new SnapError(DIFF_USAGE);

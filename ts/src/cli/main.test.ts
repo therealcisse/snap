@@ -62,15 +62,25 @@ describe('run', () => {
     assert.equal(h.stderr(), 'snap: not a Snap repository\n');
   });
 
-  it('locates the repository before reporting status as not implemented', () => {
+  it('reports a clean empty repository status through the dispatch', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
     emptyRepository(cwd);
     const h = harness({ cwd });
-    assert.equal(run(['status'], h.ctx), 1);
-    assert.equal(h.stderr(), 'snap: not implemented: status\n');
+    assert.equal(run(['status'], h.ctx), 0);
+    assert.equal(h.stdout(), 'version ()\n');
+    assert.equal(h.stderr(), '');
   });
 
-  it('rejects an unknown revert operand before reporting not implemented', () => {
+  it('runs the working-tree diff with no operands and prints nothing when clean', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
+    emptyRepository(cwd);
+    const h = harness({ cwd });
+    assert.equal(run(['diff'], h.ctx), 0);
+    assert.equal(h.stdout(), '');
+    assert.equal(h.stderr(), '');
+  });
+
+  it('rejects an unknown revert operand even without contributor configuration', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
     emptyRepository(cwd);
     const h = harness({ cwd });
@@ -78,12 +88,28 @@ describe('run', () => {
     assert.equal(h.stderr(), 'snap: unknown version: (unknown@x->1)\n');
   });
 
-  it('rejects a non-canonical diff operand before reporting not implemented', () => {
+  it('rejects a non-canonical diff operand', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
     emptyRepository(cwd);
     const h = harness({ cwd });
     assert.equal(run(['diff', '(a@x->01)', '(a@x->1)'], h.ctx), 1);
     assert.equal(h.stderr(), 'snap: invalid version: (a@x->01)\n');
+  });
+
+  it('keeps the cross-repository diff and merge and serve not implemented', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
+    emptyRepository(cwd);
+    const h = harness({ cwd });
+    assert.equal(run(['diff', '()', '()', '--repo', 'other'], h.ctx), 1);
+    assert.equal(run(['merge', 'other'], h.ctx), 1);
+    assert.equal(run(['--serve', '0'], h.ctx), 1);
+    // The harness accumulates, so one assertion carries all three refusals in order.
+    assert.equal(
+      h.stderr(),
+      'snap: not implemented: diff () () --repo other\n' +
+        'snap: not implemented: merge other\n' +
+        'snap: not implemented: --serve 0\n',
+    );
   });
 
   it('initializes a repository through the dispatch', () => {
