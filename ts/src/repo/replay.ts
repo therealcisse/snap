@@ -2,25 +2,31 @@
  * Deterministic replay (SPEC §6) — the linear-history subset this issue owes.
  *
  * Replay carries an integrated version `I` (the causal join of everything applied so far) and the
- * canonical tree `C` built from it. A patch is *ready* when its base is causally `I` or before it.
- * On a valid linear history exactly one patch is ever ready and its base equals `I`, so `C` is
- * that patch's exact base tree `B` and integration is plain application — no OT, no memoized
- * base materialization. Concurrent-ready histories (two ready patches, or one whose base is
- * strictly before `I`) need §6.2–§6.4 and fail with an explicit interim error until the merge
- * issue lands them.
+ * canonical tree `C` built from it. A patch is *ready* when its base is causally `I` or before
+ * it, and each round integrates the least ready patch by §6.1's ordering. When that winner's
+ * base is exactly `I`, `C` is the patch's exact base tree `B` and integration is plain
+ * application — no OT, no memoized base materialization. A winner whose base is strictly before
+ * `I` would need its base materialized apart from `C` (§6.2–§6.4); that is the merge issue's
+ * territory and fails with an explicit interim error until it lands.
  *
  * `replayRepository` replays the whole patch set, not a frontier-selected subset: §6.1's
  * selection is trivial for the frontier itself, and validation (§4.5) must still surface
  * unreachable patches, which a selection would silently drop.
  */
-import { decodeUtf8, encodeUtf8, isText } from '../core/bytes.ts';
+import { compareBytes, decodeUtf8, encodeUtf8, isText } from '../core/bytes.ts';
 import { SnapError } from '../core/errors.ts';
-import { EMPTY_VERSION, type Version, compareVersions } from '../core/version.ts';
+import {
+  EMPTY_VERSION,
+  type Version,
+  compareVersions,
+  componentOf,
+  snapOrder,
+} from '../core/version.ts';
 import { applyEdit } from '../text/edit.ts';
 import { tokenize } from '../text/tokens.ts';
 
 import { type Patch, type Repository, resultVersion } from './model.ts';
-import { type Tree, assertPrefixFree } from './tree.ts';
+import { type Tree, assertPrefixFree, equalBytes } from './tree.ts';
 
 /** The §6.4 auto-resolution reasons; a rule that discards an effect emits one warning pair. */
 export type WarningReason =
@@ -29,10 +35,15 @@ export type WarningReason =
 /** One `(<path>, <reason>)` warning pair (SPEC §6.4). */
 export type WarningPair = readonly [string, WarningReason];
 
-/** What replay produces: the materialized tree and the warning pairs of its own integrations. */
+/**
+ * What replay produces: the materialized tree, the warning pairs of its own integrations, and
+ * the patches in the order this replay integrated them (§6.1, first integrated first) — the
+ * canonical integration order `log` prints reversed.
+ */
 export interface ReplayResult {
   readonly tree: Tree;
   readonly warnings: readonly WarningPair[];
+  readonly sequence: readonly Patch[];
 }
 
 /**
@@ -42,11 +53,6 @@ export interface ReplayResult {
 interface PendingPatch {
   readonly patch: Patch;
   readonly index: number;
-}
-
-/** Byte equality for the §4.3 no-op rule; `Uint8Array` has no content equality of its own. */
-function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
-  return a.length === b.length && a.every((byte, i) => byte === b[i]);
 }
 
 /**
@@ -60,36 +66,81 @@ function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
  * every rule that emits a pair needs concurrent integration.
  */
 export function replayRepository(repository: Repository): ReplayResult {
+  return replayPatches(repository.patches.map((patch, index) => ({ patch, index })));
+}
+
+/**
+ * The tree a known `version` selects (SPEC §6.1): every patch `(c, n)` with `n <= version[c]`,
+ * replayed together. `diff` and `revert` materialize old versions and revert targets here.
+ *
+ * The caller must pass a repository that already passed `validateRepository` and a version in
+ * `knownVersionKeys` — the checks every command owes before naming a version — because a valid
+ * repository's selected subset can be neither cyclic nor concurrent: a subset of one linear
+ * chain per contributor is still linearly ordered.
+ */
+export function materializeVersion(repository: Repository, version: Version): Tree {
+  return replayPatches(
+    repository.patches
+      .map((patch, index) => ({ patch, index }))
+      .filter((entry) => componentOf(version, entry.patch.author) >= entry.patch.revision),
+  ).tree;
+}
+
+/**
+ * The §6.1 integration loop shared by whole-repository replay and version-selected replay:
+ * find ready patches, integrate the winner, recompute, until none remain.
+ */
+function replayPatches(entries: readonly PendingPatch[]): ReplayResult {
   let integrated: Version = EMPTY_VERSION;
   let tree: Tree = new Map<string, Uint8Array>();
+  const sequence: Patch[] = [];
   // Keyed by `${author}->${revision}`: §3.1 forbids `->` inside contributor IDs, so the key is
   // unambiguous without a separator escape.
   const pending = new Map<string, PendingPatch>();
-  repository.patches.forEach((patch, index) => {
-    pending.set(`${patch.author}->${String(patch.revision)}`, { patch, index });
-  });
+  for (const entry of entries) {
+    pending.set(`${entry.patch.author}->${String(entry.patch.revision)}`, entry);
+  }
 
   while (pending.size > 0) {
     const ready = [...pending.values()].filter(
       (entry) => compareVersions(entry.patch.base, integrated) !== 'after',
     );
-    const winner = ready.at(0);
-    if (winner === undefined) {
+    if (ready.length === 0) {
       throw new SnapError('cyclic or incomplete patch history');
     }
-    // Both cases need §6.2: several ready patches are concurrent, and a lone patch whose base is
-    // strictly before `I` needs its base `B` materialized apart from the running tree `C`.
-    const concurrent =
-      ready.length > 1 || compareVersions(winner.patch.base, integrated) === 'before';
-    if (concurrent) {
+    const winner = ready.reduce((least, entry) =>
+      readyOrder(entry.patch, least.patch) < 0 ? entry : least,
+    );
+    // A base equal to `I` applies plainly. A base strictly before `I` means `C` already holds
+    // concurrent effects; integrating then needs §6.2's separate base tree and OT, which the
+    // merge issue owes — so this replay refuses instead of approximating.
+    if (compareVersions(winner.patch.base, integrated) === 'before') {
       throw new SnapError('concurrent replay is not implemented yet');
     }
     tree = integratePatch(winner.patch, winner.index, tree);
     integrated = resultVersion(winner.patch);
+    sequence.push(winner.patch);
     pending.delete(`${winner.patch.author}->${String(winner.patch.revision)}`);
   }
 
-  return { tree, warnings: [] };
+  return { tree, warnings: [], sequence };
+}
+
+/**
+ * The §6.1 ordering between two ready patches: least result version in Snap order, then author
+ * in byte order, then revision. Distinct dots always decide at the first key — one patch moves
+ * one component — so the tiebreakers exist for the corrupted ties the spec still orders.
+ */
+function readyOrder(a: Patch, b: Patch): number {
+  const bySnap = snapOrder(resultVersion(a), resultVersion(b));
+  if (bySnap !== 0) {
+    return bySnap;
+  }
+  const byAuthor = compareBytes(a.author, b.author);
+  if (byAuthor !== 0) {
+    return byAuthor;
+  }
+  return a.revision < b.revision ? -1 : a.revision > b.revision ? 1 : 0;
 }
 
 /**

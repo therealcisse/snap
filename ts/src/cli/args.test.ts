@@ -48,7 +48,8 @@ describe('parseArgs: accepted invocations', () => {
     });
   });
 
-  it('parses diff with and without --repo', () => {
+  it('parses diff with and without --repo, and the zero-operand working-tree form', () => {
+    expectCommand(['diff'], { kind: 'diffWorktree' });
     expectCommand(['diff', '(a@x->1)', '(a@x->2)'], {
       kind: 'diff',
       oldVersion: '(a@x->1)',
@@ -102,7 +103,6 @@ describe('parseArgs: the uniform usage error (tests/24)', () => {
 
 describe('parseArgs: the diff usage error (tests/14)', () => {
   const rejected: readonly (readonly string[])[] = [
-    ['diff'],
     ['diff', '()'],
     ['diff', '()', '()', '--repo'],
     ['diff', '()', '()', '--repo', 'r', '--repo', 'r'],

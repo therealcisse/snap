@@ -255,6 +255,33 @@ steps:
   }
 });
 
+test("runner removes a dangling symlink", async () => {
+  const root = mkdtempSync(join(tmpdir(), "snap-remove-symlink-test-"));
+  const candidate = join(root, "candidate");
+  const yaml = join(root, "case.yaml");
+  writeFileSync(candidate, "#!/bin/sh\nexit 0\n");
+  chmodSync(candidate, 0o755);
+  writeFileSync(yaml, `
+format: 1
+name: remove dangling symlink
+steps:
+  - symlink: {path: gone, target: missing}
+  - remove: {path: gone}
+  - assert:
+      - type: tree_equals
+        path: .
+        entries:
+          - {path: home, kind: directory}
+          - {path: tmp, kind: directory}
+`);
+  try {
+    const result = await runCase(loadTest(yaml), { candidate });
+    assert.equal(result.passed, true, JSON.stringify(result, null, 2));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("runner rejects paths that traverse a fixture symlink", async () => {
   const root = mkdtempSync(join(tmpdir(), "snap-confinement-test-"));
   const candidate = join(root, "candidate");

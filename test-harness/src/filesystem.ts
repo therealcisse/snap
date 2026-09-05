@@ -10,6 +10,7 @@ import {
   rmSync,
   symlinkSync,
   type Stats,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,6 +89,12 @@ export function copyTree(root: string, from: string, to: string): void {
 export function removeFixture(root: string, path: string): void {
   const target = sandboxPath(root, path, false);
   if (!existsSync(target) && !isSymlink(target)) throw new Error(`remove target does not exist: ${path}`);
+  // Node's rm — recursive or not — leaves a dangling symlink in place on macOS, while rmSync's
+  // recursive mode refuses plain files; unlink removes every non-directory reliably.
+  if (!lstatSync(target).isDirectory()) {
+    unlinkSync(target);
+    return;
+  }
   rmSync(target, { recursive: true, force: false });
 }
 

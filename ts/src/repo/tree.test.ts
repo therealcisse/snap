@@ -4,7 +4,14 @@ import { describe, it } from 'node:test';
 import { encodeUtf8 } from '../core/bytes.ts';
 import { SnapError } from '../core/errors.ts';
 
-import { ancestorPaths, assertPrefixFree, sortedPaths, type Tree } from './tree.ts';
+import {
+  ancestorPaths,
+  assertPrefixFree,
+  diffTrees,
+  equalBytes,
+  sortedPaths,
+  type Tree,
+} from './tree.ts';
 
 /** A tree built from `[path, text]` pairs; insertion order is deliberately caller-chosen. */
 function treeOf(...entries: readonly (readonly [string, string])[]): Tree {
@@ -79,5 +86,37 @@ describe('assertPrefixFree', () => {
     assert.throws(() => {
       assertPrefixFree(treeOf(['a', 'x'], ['a/b', 'y']));
     }, SnapError);
+  });
+});
+
+describe('equalBytes', () => {
+  it('compares contents, not identities', () => {
+    const a = encodeUtf8('same');
+    const b = encodeUtf8('same');
+    assert.notEqual(a, b);
+    assert.ok(equalBytes(a, b));
+    assert.ok(!equalBytes(a, encodeUtf8('different')));
+    assert.ok(equalBytes(new Uint8Array(), new Uint8Array()));
+    assert.ok(!equalBytes(new Uint8Array(1), new Uint8Array()));
+  });
+});
+
+describe('diffTrees', () => {
+  it('reports adds, modifies, and deletes in byte order and omits equals', () => {
+    const before = treeOf(['z', 'old'], ['a', 'same'], ['m', 'one']);
+    const after = treeOf(['z', 'new'], ['a', 'same'], ['b/c', 'deep'], ['\uFF01', 'bang']);
+    assert.deepEqual(diffTrees(before, after), [
+      { path: 'b/c', old: undefined, new: encodeUtf8('deep') },
+      { path: 'm', old: encodeUtf8('one'), new: undefined },
+      { path: 'z', old: encodeUtf8('old'), new: encodeUtf8('new') },
+      { path: '\uFF01', old: undefined, new: encodeUtf8('bang') },
+    ]);
+  });
+
+  it('is empty for equal trees regardless of insertion order', () => {
+    const one = treeOf(['a', 'x'], ['b', 'y']);
+    const two = treeOf(['b', 'y'], ['a', 'x']);
+    assert.deepEqual(diffTrees(one, two), []);
+    assert.deepEqual(diffTrees(treeOf(), treeOf()), []);
   });
 });

@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { decodeUtf8 } from '../core/bytes.ts';
 
 import { decodeRepository, type Repository } from './model.ts';
-import { replayRepository } from './replay.ts';
+import { materializeVersion, replayRepository } from './replay.ts';
 import { sortedPaths } from './tree.ts';
 
 /** A raw JSON patch object, kept loose so failure fixtures stay one-liners. */
@@ -276,7 +276,10 @@ describe('replayRepository: history-level failures', () => {
     );
   });
 
-  it('rejects two simultaneously ready patches pending §6.2', () => {
+  it('integrates ready patches in Snap order, then refuses the one left behind', () => {
+    // Both patches base `()`, so both are ready. §6.1 picks the least result version in Snap
+    // order — `(b@x->1)` reads 0 at `a@x` while `(a@x->1)` reads 1 — so b1 integrates first;
+    // afterwards a1's base is strictly before the integrated version, which needs §6.2.
     assert.throws(
       () =>
         replayRepository(
@@ -287,11 +290,79 @@ describe('replayRepository: history-level failures', () => {
             ],
             [
               patch('a@x', 1, [], [{ type: 'put', path: 'f', content: 'YQ==' }]),
-              patch('b@x', 1, [], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+              patch('b@x', 1, [], [{ type: 'put', path: 'g', content: 'Zw==' }]),
             ],
           ),
         ),
       { message: 'concurrent replay is not implemented yet' },
     );
+  });
+
+  it('surfaces a step-5 violation from the Snap-least of two ready patches (tests/23)', () => {
+    // a1 creates f and b1 deletes it, both from `()`. The delete belongs to the Snap-least
+    // patch, so replay integrates it first and its §4.5 failure surfaces without ever needing
+    // §6.2 — the case the strict-validation matrix pins.
+    assert.throws(
+      () =>
+        replayRepository(
+          repositoryOf(
+            [
+              ['a@x', 1],
+              ['b@x', 1],
+            ],
+            [
+              patch('a@x', 1, [], [{ type: 'put', path: 'f', content: 'YQ==' }]),
+              patch('b@x', 1, [], [{ type: 'delete', path: 'f' }]),
+            ],
+          ),
+        ),
+      { message: 'delete of absent path: f' },
+    );
+  });
+});
+
+describe('replayRepository: sequence', () => {
+  it('records patches in integration order, newest last', () => {
+    const repository = repositoryOf(
+      [['a@x', 2]],
+      [
+        patch('a@x', 1, [], [createF]),
+        patch(
+          'a@x',
+          2,
+          [['a@x', 1]],
+          [{ type: 'text', path: 'f', edit: [{ retain: 1 }, { delete: 1 }] }],
+        ),
+      ],
+    );
+    const result = replayRepository(repository);
+    assert.deepEqual(
+      result.sequence.map((entry) => `${entry.author}->${String(entry.revision)}`),
+      ['a@x->1', 'a@x->2'],
+    );
+    // The empty repository integrates nothing.
+    assert.deepEqual(replayRepository(repositoryOf([], [])).sequence, []);
+  });
+});
+
+describe('materializeVersion', () => {
+  it('replays the subset a known version selects', () => {
+    const repository = repositoryOf(
+      [['a@x', 3]],
+      [
+        patch('a@x', 1, [], [createF]),
+        patch('a@x', 2, [['a@x', 1]], [{ type: 'text', path: 'g', edit: [{ insert: ['g\n'] }] }]),
+        patch('a@x', 3, [['a@x', 2]], [{ type: 'delete', path: 'f' }]),
+      ],
+    );
+    const atOne = materializeVersion(repository, [['a@x', 1]]);
+    assert.deepEqual(sortedPaths(atOne), ['f']);
+    assert.equal(decodeUtf8(atOne.get('f')!), 'one\ntwo\n');
+    const atTwo = materializeVersion(repository, [['a@x', 2]]);
+    assert.deepEqual(sortedPaths(atTwo), ['f', 'g']);
+    const atThree = materializeVersion(repository, [['a@x', 3]]);
+    assert.deepEqual(sortedPaths(atThree), ['g']);
+    // The empty tree's version `()` selects nothing.
+    assert.deepEqual(sortedPaths(materializeVersion(repository, [])), []);
   });
 });

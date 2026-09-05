@@ -16,6 +16,7 @@ import {
   type Version,
   EMPTY_VERSION,
   isValidContributorId,
+  parseVersion,
   versionFromPairs,
   versionKey,
 } from '../core/version.ts';
@@ -82,6 +83,41 @@ export function knownVersionKeys(repository: Repository): ReadonlySet<string> {
     keys.add(versionKey(resultVersion(patch)));
   }
   return keys;
+}
+
+/**
+ * Parses `<text>` as a version operand and requires it to be one this repository knows: every
+ * command that names a version — `diff`'s two operands, `revert`'s target — validates through
+ * here so syntax and knownness are checked in one place, before any output is produced (§7.6).
+ *
+ * Throws `SnapError('invalid version: <text>')` for a non-canonical operand and
+ * `SnapError('unknown version: <text>')` for a well-formed one no patch ever produced.
+ */
+export function resolveKnownVersion(repository: Repository, text: string): Version {
+  const version = parseVersion(text);
+  if (!knownVersionKeys(repository).has(versionKey(version))) {
+    throw new SnapError(`unknown version: ${text}`);
+  }
+  return version;
+}
+
+/**
+ * The repository with `patch` added and the frontier moved to its result version.
+ *
+ * `patches` keeps §4.1's ascending `(author, revision)` order by insertion, not append: on a
+ * multi-author linear history the new author can sort before an author already present, and an
+ * appended patch would break the sortedness the decoder and validator both rely on. Same-author
+ * patches keep their order because the author's new revision is by construction the greatest.
+ */
+export function withPatch(repository: Repository, patch: Patch): Repository {
+  const successor = repository.patches.findIndex(
+    (existing) => compareBytes(existing.author, patch.author) > 0,
+  );
+  const patches =
+    successor === -1
+      ? [...repository.patches, patch]
+      : [...repository.patches.slice(0, successor), patch, ...repository.patches.slice(successor)];
+  return { format: 1, frontier: resultVersion(patch), patches };
 }
 
 const CHANGE_TYPES = ['text', 'put', 'delete'] as const;

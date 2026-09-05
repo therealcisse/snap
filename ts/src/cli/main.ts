@@ -8,13 +8,16 @@
  */
 import { writeSync } from 'node:fs';
 
+import { commit } from '../commands/commit.ts';
 import { setContributorId } from '../commands/config.ts';
+import { diffVersions, diffWorktree } from '../commands/diff.ts';
 import { init } from '../commands/init.ts';
+import { log } from '../commands/log.ts';
+import { revert } from '../commands/revert.ts';
+import { status } from '../commands/status.ts';
 import { showVersion } from '../commands/version.ts';
 import { SnapError, describeFailure } from '../core/errors.ts';
-import { parseVersion, versionKey } from '../core/version.ts';
-import { findRepositoryRoot, loadRepository } from '../fs/locate.ts';
-import { type Repository, knownVersionKeys } from '../repo/model.ts';
+import { findRepositoryRoot } from '../fs/locate.ts';
 
 import { type Command, parseArgs } from './args.ts';
 import { resolveModes } from './presentation.ts';
@@ -72,37 +75,29 @@ function execute(command: Command, argv: readonly string[], ctx: Context): Comma
         home: ctx.env['HOME'],
       });
     case 'status':
+      return status(ctx.cwd);
     case 'log':
+      return log(ctx.cwd);
     case 'commit':
+      return commit(command.message, ctx.cwd, ctx.env);
+    case 'diffWorktree':
+      return diffWorktree(ctx.cwd);
+    case 'diff':
+      // The cross-repository form stays unimplemented; the boundary reports it with the
+      // invocation's own words, as the not-implemented lines have always read (tests/24).
+      if (command.repo !== undefined) {
+        return notImplemented(argv);
+      }
+      return diffVersions(command.oldVersion, command.newVersion, ctx.cwd);
+    case 'revert':
+      return revert(command.version, ctx.cwd, ctx.env);
     case 'merge':
-      // Repository commands that still lack bodies locate the repository first, so running
-      // outside one reports the location failure the suites pin (tests/14), not `not implemented`.
+      // Still without a body, the repository is located first so running outside one reports
+      // the location failure the suites pin (tests/14), not `not implemented`.
       findRepositoryRoot(ctx.cwd);
       return notImplemented(argv);
-    case 'diff': {
-      const repository = loadRepository(ctx.cwd);
-      requireKnownVersion(repository, command.oldVersion);
-      requireKnownVersion(repository, command.newVersion);
-      return notImplemented(argv);
-    }
-    case 'revert': {
-      const repository = loadRepository(ctx.cwd);
-      requireKnownVersion(repository, command.version);
-      return notImplemented(argv);
-    }
     case 'serve':
       return notImplemented(argv);
-  }
-}
-
-/**
- * Validates one `<version>` operand against `repository`: canonical syntax (SPEC §3.2) and
- * locally known (SPEC §7.6). Throws `invalid version: <text>` or `unknown version: <text>`.
- */
-function requireKnownVersion(repository: Repository, text: string): void {
-  const version = parseVersion(text);
-  if (!knownVersionKeys(repository).has(versionKey(version))) {
-    throw new SnapError(`unknown version: ${text}`);
   }
 }
 
