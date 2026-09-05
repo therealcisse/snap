@@ -13,8 +13,10 @@ import { JsonCursor, parseJson } from '../core/json.ts';
 import {
   type ContributorId,
   type Version,
+  EMPTY_VERSION,
   isValidContributorId,
   versionFromPairs,
+  versionKey,
 } from '../core/version.ts';
 
 /** One operation of an edit script (SPEC §4.4). Counts are positive safe integers. */
@@ -63,6 +65,27 @@ export interface Repository {
   readonly format: 1;
   readonly frontier: Version;
   readonly patches: readonly Patch[];
+}
+
+/**
+ * The canonical text `init` writes (SPEC §4.1, §7.1): an empty repository, two-space indent,
+ * trailing LF. Spelled as a literal rather than built by an encoder so the exact bytes are
+ * auditable in one place; the general encoder for non-empty repositories lands with the
+ * Repository model issue.
+ */
+export const EMPTY_REPOSITORY_JSON = '{\n  "format": 1,\n  "frontier": [],\n  "patches": []\n}\n';
+
+/**
+ * Every version this repository locally knows, as `versionKey` strings: the empty tree's `()`
+ * plus each patch's result version (SPEC §4.2, §7.6). Commands use it to reject operands naming
+ * versions no patch ever produced.
+ */
+export function knownVersionKeys(repository: Repository): ReadonlySet<string> {
+  const keys = new Set<string>([versionKey(EMPTY_VERSION)]);
+  for (const patch of repository.patches) {
+    keys.add(versionKey(resultVersion(patch)));
+  }
+  return keys;
 }
 
 const CHANGE_TYPES = ['text', 'put', 'delete'] as const;
@@ -189,4 +212,27 @@ function decodeEditOp(cursor: JsonCursor): EditOp {
   // Unreachable: the object has exactly one key and `finishObject` has just rejected it as
   // unknown. Stated for the type checker.
   throw new SnapError(`${cursor.path} must have one operation`);
+}
+
+/**
+ * A patch's result version (SPEC §4.2): its base with the author's component set to `revision`,
+ * in the sorted pair-array shape of a `Version`. The author's prior component, if present, is
+ * replaced in place rather than duplicated.
+ */
+function resultVersion(patch: Patch): Version {
+  const pairs: (readonly [ContributorId, number])[] = [];
+  let placed = false;
+  for (const [id, revision] of patch.base) {
+    if (!placed && compareBytes(id, patch.author) >= 0) {
+      pairs.push([patch.author, patch.revision]);
+      placed = true;
+    }
+    if (compareBytes(id, patch.author) !== 0) {
+      pairs.push([id, revision]);
+    }
+  }
+  if (!placed) {
+    pairs.push([patch.author, patch.revision]);
+  }
+  return pairs;
 }

@@ -1,7 +1,47 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import { decodeConfiguration } from './locate.ts';
+import { EMPTY_REPOSITORY_JSON } from '../repo/model.ts';
+
+import {
+  SNAP_DIRECTORY,
+  decodeConfiguration,
+  encodeConfiguration,
+  findRepositoryRoot,
+  loadRepository,
+  nearestRepository,
+  resolveContributorId,
+} from './locate.ts';
+
+/** A fresh temporary directory that no test has made a repository. */
+function directory(): string {
+  return mkdtempSync(join(tmpdir(), 'snap-locate-'));
+}
+
+/** A repository root containing `.snap/repository.json` with the canonical empty bytes. */
+function repository(): string {
+  const root = directory();
+  mkdirSync(join(root, SNAP_DIRECTORY), { recursive: true });
+  writeFileSync(join(root, SNAP_DIRECTORY, 'repository.json'), EMPTY_REPOSITORY_JSON);
+  return root;
+}
+
+/** Writes `text` as the repository-local configuration file of `root`. */
+function localConfig(root: string, text: string): void {
+  writeFileSync(join(root, SNAP_DIRECTORY, 'config.json'), text);
+}
+
+/** Writes `text` as the global configuration file under a fresh `HOME` and returns it. */
+function homeWith(text: string | undefined): string {
+  const home = directory();
+  if (text !== undefined) {
+    writeFileSync(join(home, '.snapconfig.json'), text);
+  }
+  return home;
+}
 
 describe('decodeConfiguration', () => {
   it('reads the contributor ID from the canonical shape', () => {
@@ -52,10 +92,104 @@ describe('decodeConfiguration', () => {
   });
 
   it('rejects trailing bytes and malformed text as invalid JSON', () => {
-    assert.throws(() => decodeConfiguration('{"contributor":{"id":"global@example.com"}}}}'), {
+    assert.throws(() => decodeConfiguration('{"contributor":{"id":"global@example.com"}}}'), {
       message: /^invalid JSON: /,
     });
     assert.throws(() => decodeConfiguration('not json'), { message: /^invalid JSON: / });
     assert.throws(() => decodeConfiguration(''), { message: /^invalid JSON: / });
+  });
+});
+
+describe('nearestRepository and findRepositoryRoot (SPEC §7)', () => {
+  it('finds the root from a subdirectory, stopping at the nearest one', () => {
+    const outer = repository();
+    const inner = join(outer, 'inner');
+    mkdirSync(join(inner, SNAP_DIRECTORY), { recursive: true });
+    const nested = join(inner, 'a', 'b');
+    mkdirSync(nested, { recursive: true });
+    assert.equal(nearestRepository(nested), inner);
+    assert.equal(nearestRepository(join(outer, 'a')), outer);
+    assert.equal(findRepositoryRoot(nested), inner);
+  });
+
+  it('returns undefined, or throws, outside every repository', () => {
+    const outside = directory();
+    assert.equal(nearestRepository(outside), undefined);
+    assert.throws(() => findRepositoryRoot(outside), { message: 'not a Snap repository' });
+  });
+});
+
+describe('loadRepository', () => {
+  it('loads and decodes the nearest repository.json', () => {
+    const root = repository();
+    assert.deepEqual(loadRepository(join(root, 'sub-not-created')), {
+      format: 1,
+      frontier: [],
+      patches: [],
+    });
+  });
+
+  it('reports a .snap directory without a readable repository.json as not a repository', () => {
+    const root = directory();
+    mkdirSync(join(root, SNAP_DIRECTORY));
+    assert.throws(() => loadRepository(root), { message: 'not a Snap repository' });
+  });
+});
+
+describe('resolveContributorId (SPEC §8)', () => {
+  it('prefers a local ID over a global one', () => {
+    const root = repository();
+    localConfig(root, '{"contributor":{"id":"local@x"}}');
+    const home = homeWith('{"contributor":{"id":"global@x"}}');
+    assert.equal(resolveContributorId(root, { HOME: home }), 'local@x');
+  });
+
+  it('falls back to the global file when the local one provides no ID', () => {
+    const root = repository();
+    localConfig(root, '{}');
+    const home = homeWith('{"contributor":{"id":"global@x"}}');
+    assert.equal(resolveContributorId(root, { HOME: home }), 'global@x');
+  });
+
+  it('is undefined when neither level names an ID', () => {
+    const root = repository();
+    assert.equal(resolveContributorId(root, { HOME: homeWith(undefined) }), undefined);
+  });
+
+  it('does not need HOME when the local file provides the ID', () => {
+    const root = repository();
+    localConfig(root, '{"contributor":{"id":"local@x"}}');
+    assert.equal(resolveContributorId(root, {}), 'local@x');
+  });
+
+  it('treats an absent or empty HOME as global-unavailable', () => {
+    const root = repository();
+    assert.equal(resolveContributorId(root, {}), undefined);
+    assert.equal(resolveContributorId(root, { HOME: '' }), undefined);
+  });
+
+  it('throws on a malformed file at whichever level is read', () => {
+    const root = repository();
+    localConfig(root, 'not json');
+    assert.throws(() => resolveContributorId(root, { HOME: homeWith(undefined) }), {
+      message: /^invalid JSON: /,
+    });
+
+    const cleanRoot = repository();
+    assert.throws(() => resolveContributorId(cleanRoot, { HOME: homeWith('not json') }), {
+      message: /^invalid JSON: /,
+    });
+  });
+});
+
+describe('encodeConfiguration', () => {
+  it('writes the canonical two-space shape with a trailing LF', () => {
+    assert.equal(encodeConfiguration('a@x'), '{\n  "contributor": {\n    "id": "a@x"\n  }\n}\n');
+  });
+
+  it('round-trips through decodeConfiguration', () => {
+    assert.deepEqual(decodeConfiguration(encodeConfiguration('local@x')), {
+      contributorId: 'local@x',
+    });
   });
 });

@@ -1,7 +1,29 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { decodeRepository } from './model.ts';
+import { EMPTY_VERSION, parseVersion, versionKey } from '../core/version.ts';
+
+import {
+  EMPTY_REPOSITORY_JSON,
+  type Patch,
+  type Repository,
+  decodeRepository,
+  knownVersionKeys,
+} from './model.ts';
+
+/** A minimal valid patch: author, revision, base, and one change. */
+function authoredPatch(
+  author: string,
+  revision: number,
+  base: readonly (readonly [string, number])[],
+): Patch {
+  return { author, revision, base, message: 'm', changes: [{ type: 'delete', path: 'f' }] };
+}
+
+/** A repository of `patches` with a placeholder frontier. */
+function repositoryOf(...patches: readonly Patch[]): Repository {
+  return { format: 1, frontier: EMPTY_VERSION, patches };
+}
 
 /** A one-patch repository with `patch` fields overriding the defaults. */
 function withPatch(patch: Record<string, unknown>): string {
@@ -282,5 +304,79 @@ describe('decodeRepository', () => {
         message: 'repository is missing field: frontier',
       });
     });
+  });
+});
+
+describe('EMPTY_REPOSITORY_JSON', () => {
+  it('is the canonical text: two-space indent, trailing LF, no extra bytes', () => {
+    assert.equal(
+      EMPTY_REPOSITORY_JSON,
+      '{\n  "format": 1,\n  "frontier": [],\n  "patches": []\n}\n',
+    );
+  });
+
+  it('decodes to the empty repository', () => {
+    assert.deepEqual(decodeRepository(EMPTY_REPOSITORY_JSON), {
+      format: 1,
+      frontier: [],
+      patches: [],
+    });
+  });
+});
+
+describe('knownVersionKeys (SPEC §4.2, §7.6)', () => {
+  it('knows only the empty version for an empty repository', () => {
+    assert.deepEqual(new Set(knownVersionKeys(repositoryOf())), new Set(['()']));
+  });
+
+  it('adds each patch’s result version', () => {
+    const keys = knownVersionKeys(
+      repositoryOf(authoredPatch('a@x', 1, []), authoredPatch('a@x', 2, [['a@x', 1]])),
+    );
+    assert.deepEqual(keys, new Set(['()', '(a@x->1)', '(a@x->2)']));
+  });
+
+  it('sets the author component, replacing in place or inserting in canonical order', () => {
+    // Replacing the author's prior component (a@x) and inserting a new author (c@x) between
+    // a@x and d@x: both results must be sorted pair arrays, which versionKey requires.
+    const replaced = knownVersionKeys(
+      repositoryOf(
+        authoredPatch('a@x', 2, [
+          ['a@x', 1],
+          ['b@x', 2],
+        ]),
+      ),
+    );
+    assert.ok(replaced.has('(a@x->2,b@x->2)'));
+    assert.ok(!replaced.has('(a@x->1,b@x->2)'));
+
+    const inserted = knownVersionKeys(
+      repositoryOf(
+        authoredPatch('c@x', 1, [
+          ['a@x', 1],
+          ['d@x', 1],
+        ]),
+      ),
+    );
+    assert.ok(inserted.has('(a@x->1,c@x->1,d@x->1)'));
+  });
+
+  it('keys in versionKey form, matching freshly parsed versions', () => {
+    const repository = decodeRepository(
+      JSON.stringify({
+        format: 1,
+        frontier: [],
+        patches: [
+          {
+            author: 'a@x',
+            revision: 1,
+            base: [],
+            message: 'm',
+            changes: [{ type: 'delete', path: 'f' }],
+          },
+        ],
+      }),
+    );
+    assert.ok(knownVersionKeys(repository).has(versionKey(parseVersion('(a@x->1)'))));
   });
 });
