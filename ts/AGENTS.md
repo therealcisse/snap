@@ -30,8 +30,10 @@ touches `ts/`. Unit tests supplement the YAML suite; they never replace it.
 
 One responsibility per file under `src/`: `core/` (bytes, errors, version,
 strict JSON), `text/` (tokens, edit scripts, diff, transform), `repo/` (model,
-tree, validate, replay), `fs/` (locate, worktree, materialize), `http/`,
-`commands/` (one file per command, pure: arguments in, output record out),
+tree, validate, replay), `fs/` (locate, worktree, materialize), `http/`
+(snapshot server, repository client), `commands/` (one file per command, pure:
+arguments in, output record out — `serve.ts` is the one sanctioned exception:
+long-running, prints its own startup URL, resolves when a signal ends it),
 `cli/` (args, presentation, main). Unit tests are colocated as
 `src/**/*.test.ts`.
 

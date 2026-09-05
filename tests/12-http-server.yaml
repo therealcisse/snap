@@ -80,6 +80,12 @@ steps:
       expect:
         - type: status
           value: 404
+  - http_request:
+      method: POST
+      url: "{{origin_url}}/nope"
+      expect:
+        - type: status
+          value: 404
   - write_file:
       path: repo/file.txt
       text: "two\n"
