@@ -1,6 +1,6 @@
 ---
 name: snap-1.0
-description: TypeScript implementation of SPEC.md under ts/ passing all 31 acceptance suites via ./verify --lang ts, plus the §11 unit and property tests the YAML harness cannot express
+description: TypeScript implementation of SPEC.md under ts/ passing all 32 acceptance suites via ./verify --lang ts, plus the §11 unit and property tests the YAML harness cannot express
 created: 2026-09-04
 ---
 
@@ -33,12 +33,12 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 
 ## Foundations
 
-- [ ] Byte-order comparator used for every observable ordering (§2, §3.2); unit test on the UTF-16/UTF-8 divergence (U+FF01 vs U+1F600).
-- [ ] Version parse and format for CLI and JSON forms with every §3.2 rejection; unit tests for duplicate ID, zero, leading zero, overflow at `9007199254740992`, whitespace, non-canonical order, invalid ID shapes (§3.1).
-- [ ] Four-outcome comparison, `join`, Snap order (§3.3, §3.4); unit tests for join laws and Snap order extending causal order.
-- [ ] Strict JSON reader rejecting duplicate keys, non-integer and unsafe numbers, unknown fields (§4.1, §8); unit tests for each rejection.
-- [ ] Text detection (valid UTF-8, no NUL) and BOM-preserving decode (§4.4).
-- [ ] Canonical padded base64 decode with round-trip check (§4.3); unit test rejects `AR==`.
+- [x] Byte-order comparator used for every observable ordering (§2, §3.2); unit test on the UTF-16/UTF-8 divergence (U+FF01 vs U+1F600).
+- [x] Version parse and format for CLI and JSON forms with every §3.2 rejection; unit tests for duplicate ID, zero, leading zero, overflow at `9007199254740992`, whitespace, non-canonical order, invalid ID shapes (§3.1).
+- [x] Four-outcome comparison, `join`, Snap order (§3.3, §3.4); unit tests for join laws and Snap order extending causal order.
+- [x] Strict JSON reader rejecting duplicate keys, non-integer and unsafe numbers, unknown fields (§4.1, §8); unit tests for each rejection.
+- [x] Text detection (valid UTF-8, no NUL) and BOM-preserving decode (§4.4).
+- [x] Canonical padded base64 decode with round-trip check (§4.3); unit test rejects `AR==`.
 
 ## CLI skeleton and configuration
 

@@ -1,0 +1,58 @@
+---
+title: "ts/ has none of the core primitives — byte ordering, versions, strict JSON, text detection, base64, and the repository and config decoders — that every command depends on"
+date: 2026-09-04
+start-date: 2026-09-04
+author: agent
+id: core-foundations
+stack: snap-1.0
+closed: 2026-09-04
+---
+# ts/ has none of the core primitives — byte ordering, versions, strict JSON, text detection, base64, and the repository and config decoders — that every command depends on
+
+## Problem
+
+Snap cannot yet do any of the small things every command needs before it can do anything useful: put file paths and contributor IDs in the order the spec requires, read and compare version vectors, read its own `repository.json` and configuration files strictly enough to notice corruption, decide whether a file is text, or decode binary file content. Without these primitives no command can be started, and the acceptance cases that exercise strict validation have nothing to run against.
+
+Technically, `ts/src/core/` contains only `errors.ts`; `core/bytes.ts`, `core/version.ts`, and `core/json.ts` named by design `snap-ts-architecture` and by the `eslint.config.js` override for `src/core/json.ts` do not exist, and there is no `repo/` or `fs/` directory. The idiomatic JavaScript defaults for each of these produce wrong bytes silently: string `<` and default `sort` order by UTF-16 code units, not UTF-8 bytes (U+FF01 sorts before U+1F600 in UTF-16 and after it in UTF-8); `JSON.parse` accepts duplicate keys (last wins), rounds integers above `2^53`, and cannot distinguish `1` from `1.0`; `Buffer.from(s, 'base64')` accepts unpadded, non-canonical, and whitespace-laden input; `buffer.toString('utf8')` replaces invalid sequences instead of failing and `TextDecoder` strips a leading BOM by default. Nothing currently guards against any of these except the ESLint bans landed by `toolchain-scaffolding`, which forbid the defaults without providing the replacements.
+
+Separately, `tests/03-configuration.yaml` (lines 68–80) writes `$HOME/.snapconfig.json` as `{"contributor":{"id":"global@example.com"}}}}` — two trailing `}` after a complete value — and expects `commit` to succeed using that ID, while `SPEC.md` §8 says a malformed file that is read is an error, and the same test expects `not json` to fail with `invalid JSON`. The spec and the suite disagree on whether trailing bytes after a complete JSON value are malformed; a strict reader cannot be written until one of them is corrected.
+
+## Impact
+
+- Every later stack section (CLI skeleton, text core, repository model, working tree, replay, HTTP) imports these primitives; none can begin until they exist with fixed signatures.
+- Acceptance suites `tests/15-repository-validation.yaml`, `19-version-boundaries.yaml`, `23-strict-validation-matrix.yaml`, `25-config-version-path-boundaries.yaml`, and `30-non-integer-json-lexemes.yaml` pin error texts that originate here (`invalid version`, `invalid contributor id`, `duplicate JSON key`, `positive safe integer`, `repository has unknown field: unknown`, `unknown field: extra`, `canonical base64`, `path is invalid`, `invalid JSON`); they are unreachable until the primitives produce those exact details.
+- SPEC §11 item 1 (canonical version parsing, four-way comparison, Snap order, join laws) and the §11 requirement to unit-test what the YAML harness cannot express (the UTF-16/UTF-8 ordering divergence, each strict-JSON rejection, `AR==` rejection) have no home.
+- If the §8 contradiction is left unsettled, either `tests/03` fails against a spec-conforming reader or the reader silently tolerates malformed configuration — the class of ambiguity issue `spec-ambiguities-before-implementation` was created to eliminate before code depends on it.
+
+## Context
+
+- Locked by design `snap-ts-architecture` (decisions 1–4, module layout): versions are sorted `[id, revision][]` arrays keyed in maps by their canonical `(a@x->1,b@x->2)` string; one byte-order comparator (`codePointAt` walk or `Buffer.compare` on UTF-8) for every observable ordering; file contents are `Uint8Array` end to end, text iff `buffer.isUtf8` and no NUL, decoded with `TextDecoder('utf-8', { fatal: true, ignoreBOM: true })`; a single-pass recursive-descent strict JSON reader rejecting duplicate keys, non-integer and unsafe numbers, and unknown fields; `JSON.stringify` permitted for output. Module homes: `core/bytes.ts` (comparator, `isText`, base64, UTF-8 decode helper), `core/version.ts` (parse/format CLI and JSON forms, `compare`, `join`, `snapOrder`, `isKnown`), `core/json.ts` (strict reader), `repo/model.ts` (`Patch`/`Change`/`Repository` decode with exact schema), `fs/locate.ts` (§8 configuration).
+- Spec sections: §2 tracked-path validity (nonempty, no control character or backslash, no empty/`.`/`..` segment, first segment not `.snap`, unsigned UTF-8 byte order); §3.1 contributor ID (exactly one `@` with nonempty sides, no control/whitespace/`,`/`(`/`)`/`->`, ≤254 bytes) and revision (positive, ≤ `9007199254740991`); §3.2 canonical CLI syntax rejecting duplicate IDs, explicit zeroes, leading zeroes, overflow, invalid IDs, whitespace, noncanonical order, and the JSON pair-array form; §3.3 four-outcome comparison and `join`; §3.4 Snap order over the sorted ID union; §4.1 integer-ness on the lexeme `-?(0|[1-9][0-9]*)`, unique keys, unknown fields as errors, `format`/`frontier`/`patches` shape; §4.2 `message` nonempty UTF-8 with only tab/LF as control characters, `changes` nonempty, path-sorted, one per path; §4.3 the three change variants with padded RFC 4648 `content`; §4.4 text definition; §8 exact config shape `{"contributor":{"id":…}}` with malformed file, non-unique or unknown field, and invalid ID as errors.
+- Research `snap-performance-and-data-structures` records the JavaScript default traps above and the canonical round-trip check for base64 (decode, re-encode, compare) as the way to reject non-canonical input such as `AR==` with Node built-ins only.
+- Settled constraints (`ts/AGENTS.md`, `toolchain-scaffolding`): production code uses Node built-ins only; synchronous `fs`; all expected failures are `SnapError` with the exact `<detail>` text; unit tests colocated as `src/**/*.test.ts` under `node --test` with `node:assert/strict` and fast-check; `JSON.parse` is lint-banned everywhere except `src/core/json.ts`; `localeCompare` and lossy decoders are banned throughout.
+- Test coverage that must survive: `tests/06` and `tests/10` write binary files via base64 and compare bytes; `tests/26` writes CRLF and NUL-containing files (text vs binary boundary); `tests/25` pins `duplicate JSON key`, `invalid contributor id` (config and CLI), and `invalid version`; `tests/23` line 24 pins `snap: repository has unknown field: unknown\n` exactly, line 162 `unknown field: extra` at a nested level.
+- Spec/test contradiction to settle in this issue, per root `AGENTS.md` ("correct the spec first or in the same commit and add a regression case"): whether trailing bytes after a complete JSON value make a configuration (or repository) file malformed (§8 wording vs `tests/03` lines 68–80). Whichever way it is settled, the decision belongs in `SPEC.md` §4.1/§8 with the suite made consistent.
+- Tracked-path validity (§2) is needed by the repository decoder (`path is invalid`, `tests/15`) and later by the working-tree scan; the design does not assign it a module.
+
+## Out of Scope
+
+- Text token semantics beyond the text/binary decision: the §4.4 tokenizer, edit-script application, coalescing, adjacency and consumption rules, and the §5 diff (Text core section). The repository decoder checks only the structural shape of edit operations (one key, positive safe integer counts, nonempty insert strings).
+- Canonical repository encode (two-space indent, trailing LF) and the structural-equality serialization for dot comparison (Repository model section).
+- §4.5 validation steps 2–6: patch sorting, dot uniqueness, contiguity, closure, `revision = base[author] + 1`, change-vs-base, replay, and `isKnown` against a repository (Repository model and Concurrent replay sections).
+- Configuration *resolution* (local-then-global, `$HOME` absent), the `snap config` command, the nearest-repository walk, and the `contributor.id is required` error (CLI skeleton section). This issue provides the file decoder only.
+- Base64 *encoding* of file content (needed by `commit`, later).
+- The `Tree` type, prefix-free check, and namespace queries (Repository model section).
+- Any command, CLI grammar, output, or HTTP behavior.
+- Performance work beyond keeping the module graph free of top-level work.
+
+## Plan Closeout Notes
+
+<!-- plan-close-review: core-foundations -->
+
+- Scope: signature-level drift, confirmed by the user at close. The trailing-content decision flipped from lenient to strict during implementation after the `tests/03` line 70 fixture was recognized as the harness's `}}}}` → `}}` escape; by explicit user instruction the approved plan was edited in place rather than replanned (Context, Current State, Developer Feedback, Steps 1/4/7, Acceptance Tests), so the plan text now matches the code. Remaining deviations recorded in design `core-foundations`: `parseJson(text, root)` takes the root name; `versionFromPairs(pairs, path)` takes a path string instead of an `at` callback; `JsonCursor.literal(allowed[])` is typed and `keyCount()` was added; `invalid JSON` reasons carry `at offset N`; the `tests/32` fixture writes three extra braces, not two. All ten tasks implemented; acceptance checks passed (`npm run check` exit 0 with 141 tests / 21 suites; `./verify --list` 32 cases; `./verify --lang ts --filter 32-trailing` fails the case as `not implemented`, not the harness; `git diff --quiet ts/AGENTS.md AGENTS.md README.md ts/eslint.config.js ts/package.json` exit 0). One acceptance test added as planned (`tests/32-trailing-json-content.yaml`); none modified.
+- Documentation impact: as planned — `SPEC.md` §4.1 and §8 gained the trailing-content sentences; `tests/32` added; `ts/AGENTS.md`, root `AGENTS.md`, `README.md` unchanged and still accurate. Design `snap-ts-architecture` describes `core/json.ts` as "producing a typed value"; `JsonCursor` is the concrete form, recorded in design `core-foundations` since the intent design is immutable. `TEST-HARNESS.md` lines 371–373, 389, 402 still reference `capstones/snap/` (uncaptured).
+- Guidelines / conventions: none recorded (no `GUIDELINES.md` in this repository). New conventions worth a later note: decoders read JSON only through `JsonCursor` and must call `finishObject`; every schema error is `<dotted path> <predicate>` with roots `repository`/`configuration`/`body`, except the three path-free messages the suite pins (`invalid contributor id`, `path is invalid`, `content is not canonical base64`); `versionKey` is the only sanctioned map key for versions.
+- Comments / docstrings: conform (module docs state why the JavaScript default is wrong and what invariant the module holds; exported members carry contract JSDoc naming the thrown `SnapError` text; inline comments explain non-obvious choices such as the textual overflow bound, the base64 re-encode, and the `\u` surrogate handling; no transliteration found).
+- Stack items satisfied: `snap-1.0` → Foundations: all six items (byte-order comparator with the U+FF01 vs U+1F600 test; version parse/format with every §3.2 rejection; four-outcome comparison, `join`, Snap order with law tests; strict JSON reader rejecting duplicate keys, non-integer and unsafe numbers, unknown fields; text detection and BOM-preserving decode; canonical base64 decode rejecting `AR==`).
+
+<!-- /plan-close-review -->
