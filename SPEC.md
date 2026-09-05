@@ -707,7 +707,10 @@ HEAD /repository.json
 `GET` returns the startup snapshot as JSON with
 `Content-Type: application/json; charset=utf-8`. `HEAD` returns the same status
 and headers without a body. Other paths return `404`; other methods return
-`405` with `Allow: GET, HEAD`.
+`405` with `Allow: GET, HEAD`. Classification is by exact target: a request
+whose target is not exactly `/repository.json` — any other path, or the fixed
+path with a query string — returns `404` regardless of method, and `405`
+applies only to other methods on the exact target.
 
 When a repository operand starts with `http://` or `https://`, Snap performs
 one GET of that exact URL, requires status 200, parses the body as a repository

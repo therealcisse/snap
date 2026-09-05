@@ -1,6 +1,8 @@
 import { fdOutput, run } from './cli/main.ts';
 
-process.exitCode = run(process.argv.slice(2), {
+// serve keeps the process alive until a signal ends it, so run resolves late for it; every
+// other command resolves immediately. Top-level await keeps the exit code the last word.
+process.exitCode = await run(process.argv.slice(2), {
   out: fdOutput(),
   env: process.env,
   cwd: process.cwd(),

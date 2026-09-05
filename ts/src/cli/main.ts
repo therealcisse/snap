@@ -3,13 +3,15 @@
  *
  * This is the only module in `src/` that writes to the process's standard streams. Commands are
  * pure — parsed arguments in, an output record out — so `run` is where an invocation becomes
- * writes and an exit status. Writes are synchronous so the entire output is flushed before the
+ * writes and an exit status; `serve` is the one exception, a long-running command that prints
+ * its own startup line. Writes are synchronous so the entire output is flushed before the
  * process ends, even when stdout is a pipe (SPEC §10).
  */
 import { writeSync } from 'node:fs';
 
 import { setContributorId } from '../commands/config.ts';
 import { init } from '../commands/init.ts';
+import { serve } from '../commands/serve.ts';
 import { showVersion } from '../commands/version.ts';
 import { SnapError, describeFailure } from '../core/errors.ts';
 import { parseVersion, versionKey } from '../core/version.ts';
@@ -37,12 +39,18 @@ export interface Context {
 }
 
 /** Runs one CLI invocation and returns the process exit status. Never throws. */
-export function run(argv: readonly string[], ctx: Context): number {
+export async function run(argv: readonly string[], ctx: Context): Promise<number> {
   try {
     // §7.11: an invalid SNAP_COLOR fails before any command runs. The resolved modes take
     // effect when rendering lands; today resolution exists to validate the invocation.
     resolveModes(ctx.env, ctx.isStdoutTty, ctx.isStderrTty);
-    emit(execute(parseArgs(argv), argv, ctx), ctx);
+    const command = parseArgs(argv);
+    // §7.9: serve runs until a signal ends it, so it cannot return an output record. It still
+    // runs inside this boundary so its startup failures funnel through the one error path.
+    if (command.kind === 'serve') {
+      return await serve(command.port, ctx.cwd, ctx.out.stdout);
+    }
+    emit(execute(command, argv, ctx), ctx);
     return 0;
   } catch (failure: unknown) {
     const { exitCode, line } = describeFailure(failure);
@@ -59,7 +67,10 @@ export function fdOutput(): Output {
   };
 }
 
-function execute(command: Command, argv: readonly string[], ctx: Context): CommandOutput {
+/** The commands that complete synchronously and speak in `CommandOutput`s; serve runs above. */
+type ImmediateCommand = Exclude<Command, { kind: 'serve' }>;
+
+function execute(command: ImmediateCommand, argv: readonly string[], ctx: Context): CommandOutput {
   switch (command.kind) {
     case 'showVersion':
       return showVersion();
@@ -90,8 +101,6 @@ function execute(command: Command, argv: readonly string[], ctx: Context): Comma
       requireKnownVersion(repository, command.version);
       return notImplemented(argv);
     }
-    case 'serve':
-      return notImplemented(argv);
   }
 }
 
