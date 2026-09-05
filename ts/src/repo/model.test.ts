@@ -8,7 +8,10 @@ import {
   type Patch,
   type Repository,
   decodeRepository,
+  encodePatch,
+  encodeRepository,
   knownVersionKeys,
+  resultVersion,
 } from './model.ts';
 
 /** A minimal valid patch: author, revision, base, and one change. */
@@ -321,6 +324,116 @@ describe('EMPTY_REPOSITORY_JSON', () => {
       frontier: [],
       patches: [],
     });
+  });
+});
+
+describe('encodeRepository', () => {
+  const onePatch = JSON.stringify({
+    format: 1,
+    frontier: [['a@x', 1]],
+    patches: [
+      {
+        author: 'a@x',
+        revision: 1,
+        base: [],
+        message: 'm',
+        changes: [
+          { type: 'put', path: 'bin', content: 'AAEC' },
+          { type: 'text', path: 'f', edit: [{ insert: ['one\n', 'two\n'] }] },
+        ],
+      },
+    ],
+  });
+
+  it('writes the empty repository as EMPTY_REPOSITORY_JSON, byte for byte', () => {
+    assert.equal(encodeRepository(decodeRepository(EMPTY_REPOSITORY_JSON)), EMPTY_REPOSITORY_JSON);
+  });
+
+  it('round-trips a nonempty repository through decode and encode', () => {
+    const repository = decodeRepository(onePatch);
+    assert.deepEqual(decodeRepository(encodeRepository(repository)), repository);
+  });
+
+  it('is a fixpoint: re-encoding the decoded encoding is byte-identical', () => {
+    const once = encodeRepository(decodeRepository(onePatch));
+    assert.equal(encodeRepository(decodeRepository(once)), once);
+  });
+
+  it('writes the spec field order with two-space indent and trailing LF', () => {
+    const text = encodeRepository(decodeRepository(onePatch));
+    assert.ok(text.endsWith('  ]\n}\n'));
+    assert.ok(
+      text.startsWith(
+        '{\n  "format": 1,\n  "frontier": [\n    [\n      "a@x",\n      1\n    ]\n  ],\n' +
+          '  "patches": [\n    {\n      "author": "a@x",\n      "revision": 1,\n      "base": [],\n' +
+          '      "message": "m",\n      "changes": [\n',
+      ),
+    );
+  });
+});
+
+describe('encodePatch', () => {
+  it('emits compact JSON with the spec field order', () => {
+    const patch = decodeRepository(withPatch({})).patches[0]!;
+    assert.equal(
+      encodePatch(patch),
+      '{"author":"a@x","revision":1,"base":[],"message":"m",' +
+        '"changes":[{"type":"text","path":"f","edit":[]}]}',
+    );
+  });
+
+  it('re-encodes put content as canonical base64', () => {
+    const patch = decodeRepository(withChange({ type: 'put', path: 'bin', content: 'AAEC' }))
+      .patches[0]!;
+    assert.equal(
+      encodePatch(patch),
+      '{"author":"a@x","revision":1,"base":[],"message":"m",' +
+        '"changes":[{"type":"put","path":"bin","content":"AAEC"}]}',
+    );
+  });
+
+  it('gives structurally equal patches equal strings regardless of decode provenance', () => {
+    assert.equal(
+      encodePatch(decodeRepository(withPatch({})).patches[0]!),
+      encodePatch(decodeRepository(withPatch({})).patches[0]!),
+    );
+  });
+});
+
+describe('resultVersion', () => {
+  it('replaces the author component in place', () => {
+    assert.deepEqual(
+      resultVersion(
+        authoredPatch('a@x', 3, [
+          ['a@x', 1],
+          ['b@x', 2],
+        ]),
+      ),
+      [
+        ['a@x', 3],
+        ['b@x', 2],
+      ],
+    );
+  });
+
+  it('inserts a new author in canonical order', () => {
+    assert.deepEqual(
+      resultVersion(
+        authoredPatch('c@x', 1, [
+          ['a@x', 1],
+          ['d@x', 1],
+        ]),
+      ),
+      [
+        ['a@x', 1],
+        ['c@x', 1],
+        ['d@x', 1],
+      ],
+    );
+  });
+
+  it('sets the author on an empty base', () => {
+    assert.deepEqual(resultVersion(authoredPatch('a@x', 1, [])), [['a@x', 1]]);
   });
 });
 

@@ -74,8 +74,9 @@ export function coalesceEditScript(ops: readonly EditOp[]): EditOp[] {
  *
  * Enforced: counts are positive safe integers, insert lists are nonempty and their tokens are
  * canonical — every inserted token except possibly the final operation's last token ends in LF,
- * because content follows it — and adjacent operations differ in kind. Consumption against a
- * base is `applyEdit`'s rule; a script that passes here may still over- or under-consume.
+ * because content follows it — and adjacent operations differ in kind, the kind named in the
+ * error. Consumption against a base is `applyEdit`'s rule; a script that passes here may still
+ * over- or under-consume.
  */
 export function validateEditScript(context: string, ops: readonly EditOp[]): void {
   const last = ops.length - 1;
@@ -104,7 +105,8 @@ export function validateEditScript(context: string, ops: readonly EditOp[]): voi
     }
     const kind = editOpKind(op);
     if (kind === previousKind) {
-      throw new SnapError(`${context} has adjacent operations of the same kind`);
+      // The acceptance suite pins the kind: `has adjacent insert operations` must be reachable.
+      throw new SnapError(`${context} has adjacent ${kind} operations`);
     }
     previousKind = kind;
   }

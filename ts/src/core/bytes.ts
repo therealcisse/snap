@@ -83,6 +83,17 @@ export function decodeBase64(text: string): Uint8Array {
 }
 
 /**
+ * Encodes a `put` change's `content` (SPEC §4.3): the canonical padded RFC 4648 spelling of `bytes`.
+ *
+ * This is exactly the form `decodeBase64` accepts, so `decodeBase64(encodeBase64(b))` is `b` and
+ * one byte sequence has one spelling. `toString('base64')` produces padded standard base64 by
+ * construction, never the URL-safe alphabet or unpadded shapes the decoder rejects.
+ */
+export function encodeBase64(bytes: Uint8Array): string {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
+}
+
+/**
  * Whether `path` is a valid tracked path (SPEC §2): nonempty, `/`-separated, no ASCII control
  * character or backslash, no empty, `.`, or `..` segment, and a first segment other than `.snap`.
  *

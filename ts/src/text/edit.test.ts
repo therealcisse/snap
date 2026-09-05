@@ -45,13 +45,13 @@ describe('applyEdit (SPEC §4.4)', () => {
 });
 
 describe('validateEditScript (SPEC §4.4)', () => {
-  it('rejects adjacent operations of the same kind', () => {
+  it('rejects adjacent operations of the same kind, naming the kind', () => {
     assert.throws(
       () => {
         validateEditScript('x edit', [{ retain: 1 }, { retain: 1 }]);
       },
       {
-        message: 'x edit has adjacent operations of the same kind',
+        message: 'x edit has adjacent retain operations',
       },
     );
     assert.throws(
@@ -59,7 +59,7 @@ describe('validateEditScript (SPEC §4.4)', () => {
         validateEditScript('x edit', [{ delete: 1 }, { delete: 1 }]);
       },
       {
-        message: 'x edit has adjacent operations of the same kind',
+        message: 'x edit has adjacent delete operations',
       },
     );
     assert.throws(
@@ -67,7 +67,7 @@ describe('validateEditScript (SPEC §4.4)', () => {
         validateEditScript('x edit', [{ insert: ['a\n'] }, { insert: ['b\n'] }]);
       },
       {
-        message: 'x edit has adjacent operations of the same kind',
+        message: 'x edit has adjacent insert operations',
       },
     );
   });

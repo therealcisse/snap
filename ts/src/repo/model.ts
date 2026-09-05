@@ -1,13 +1,14 @@
 /**
- * The repository value (SPEC §4): patches, their changes, and the decoder from `repository.json`.
+ * The repository value (SPEC §4): patches, their changes, and the `repository.json` codec.
  *
  * `decodeRepository` performs step 1 of SPEC §4.5 — exact schema plus the field-level rules for
  * versions, IDs, paths, messages, and changes. Everything that needs more than one patch or a
  * materialized tree (sorting across patches, dot uniqueness, base closure, change applicability,
  * replay) belongs to `repo/validate.ts` and `repo/replay.ts`, so a decoded `Repository` is
- * well-formed but not yet known to be valid.
+ * well-formed but not yet known to be valid. `encodeRepository` and `encodePatch` are the exact
+ * inverses: canonical text for storage, compact JSON for structural patch equality (SPEC §4.2).
  */
-import { compareBytes, decodeBase64, isValidTrackedPath } from '../core/bytes.ts';
+import { compareBytes, decodeBase64, encodeBase64, isValidTrackedPath } from '../core/bytes.ts';
 import { SnapError } from '../core/errors.ts';
 import { JsonCursor, parseJson } from '../core/json.ts';
 import {
@@ -64,9 +65,9 @@ export interface Repository {
 
 /**
  * The canonical text `init` writes (SPEC §4.1, §7.1): an empty repository, two-space indent,
- * trailing LF. Spelled as a literal rather than built by an encoder so the exact bytes are
- * auditable in one place; the general encoder for non-empty repositories lands with the
- * Repository model issue.
+ * trailing LF. Spelled as a literal rather than built by the encoder so the exact bytes are
+ * auditable in one place; `model.test.ts` pins `encodeRepository` of the empty repository to
+ * this literal so spec, encoder, and decoder can never drift apart.
  */
 export const EMPTY_REPOSITORY_JSON = '{\n  "format": 1,\n  "frontier": [],\n  "patches": []\n}\n';
 
@@ -209,12 +210,76 @@ function decodeEditOp(cursor: JsonCursor): EditOp {
   throw new SnapError(`${cursor.path} must have one operation`);
 }
 
+// Canonical encoding (SPEC §4.1). A decoded `Repository` is already canonical — version pairs
+// ascending in byte order, changes sorted and deduplicated by path, base64 canonical — so
+// encoding is a faithful walk over the typed value with the spec's field order fixed by
+// construction: `JSON.stringify` writes object properties in insertion order, so the shapes
+// below are the bytes on disk.
+
+/** The JSON forms the encoders build and `JSON.stringify` serializes. */
+type JsonValue =
+  string | number | boolean | null | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+
+/** SPEC §3.2 JSON form of a version: `[id, revision]` pairs in canonical order. */
+function versionValue(version: Version): JsonValue {
+  return version.map(([id, revision]): JsonValue => [id, revision]);
+}
+
+function changeValue(change: Change): JsonValue {
+  switch (change.type) {
+    case 'text':
+      return { type: change.type, path: change.path, edit: change.edit.map((op): JsonValue => op) };
+    case 'put':
+      return { type: change.type, path: change.path, content: encodeBase64(change.content) };
+    case 'delete':
+      return { type: change.type, path: change.path };
+  }
+}
+
+function patchValue(patch: Patch): JsonValue {
+  return {
+    author: patch.author,
+    revision: patch.revision,
+    base: versionValue(patch.base),
+    message: patch.message,
+    changes: patch.changes.map(changeValue),
+  };
+}
+
+/**
+ * Encodes one patch in its compact JSON form: the unit of structural patch equality (SPEC §4.2)
+ * and the natural form for logs and diagnostics. Compare with `===` after `encodePatch` on both
+ * sides; two structurally equal patches from different decode runs compare unequal as objects.
+ */
+export function encodePatch(patch: Patch): string {
+  return JSON.stringify(patchValue(patch));
+}
+
+/**
+ * Encodes the canonical text of `repository.json` (SPEC §4.1): two-space indent and a trailing
+ * LF — exactly the text `decodeRepository` accepts, byte for byte, for any well-formed
+ * repository. `init` writes this of the empty repository, matching `EMPTY_REPOSITORY_JSON`.
+ */
+export function encodeRepository(repository: Repository): string {
+  return (
+    JSON.stringify(
+      {
+        format: repository.format,
+        frontier: versionValue(repository.frontier),
+        patches: repository.patches.map(patchValue),
+      },
+      null,
+      2,
+    ) + '\n'
+  );
+}
+
 /**
  * A patch's result version (SPEC §4.2): its base with the author's component set to `revision`,
  * in the sorted pair-array shape of a `Version`. The author's prior component, if present, is
  * replaced in place rather than duplicated.
  */
-function resultVersion(patch: Patch): Version {
+export function resultVersion(patch: Patch): Version {
   const pairs: (readonly [ContributorId, number])[] = [];
   let placed = false;
   for (const [id, revision] of patch.base) {

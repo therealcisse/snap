@@ -7,6 +7,7 @@ import {
   compareBytes,
   decodeBase64,
   decodeUtf8,
+  encodeBase64,
   encodeUtf8,
   isText,
   isValidTrackedPath,
@@ -97,9 +98,23 @@ describe('decodeBase64', () => {
   it('round-trips every byte sequence through the canonical encoding', () => {
     fc.assert(
       fc.property(fc.uint8Array(), (bytes) => {
-        assert.deepEqual(decodeBase64(Buffer.from(bytes).toString('base64')), bytes);
+        assert.deepEqual(decodeBase64(encodeBase64(bytes)), bytes);
       }),
     );
+  });
+});
+
+describe('encodeBase64', () => {
+  it('produces the canonical padded spelling of fixed examples', () => {
+    assert.equal(encodeBase64(new Uint8Array()), '');
+    assert.equal(encodeBase64(new Uint8Array([0x61])), 'YQ==');
+    assert.equal(encodeBase64(new Uint8Array([0, 1, 2])), 'AAEC');
+    assert.equal(encodeBase64(new Uint8Array([0xff, 0xfe])), '//4=');
+  });
+
+  it('encodes only the bytes of a subarray view, not its backing buffer', () => {
+    const all = new Uint8Array([1, 2, 3, 4]);
+    assert.deepEqual(decodeBase64(encodeBase64(all.subarray(1, 3))), new Uint8Array([2, 3]));
   });
 });
 

@@ -1,0 +1,177 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+
+import { decodeUtf8 } from '../core/bytes.ts';
+
+import { type Repository, decodeRepository } from './model.ts';
+import { validateRepository } from './validate.ts';
+
+type RawPatch = Record<string, unknown>;
+
+function patch(
+  author: string,
+  revision: number,
+  base: readonly (readonly [string, number])[],
+  changes: readonly unknown[],
+): RawPatch {
+  return { author, revision, base, message: 'm', changes };
+}
+
+function repositoryOf(
+  frontier: readonly (readonly [string, number])[],
+  patchesRaw: readonly RawPatch[],
+): Repository {
+  return decodeRepository(JSON.stringify({ format: 1, frontier, patches: patchesRaw }));
+}
+
+/** `a@x->1` creating text file `f`, the valid seed most fixtures build on. */
+const createF = { type: 'text', path: 'f', edit: [{ insert: ['one\n'] }] };
+
+describe('validateRepository: acceptance', () => {
+  it('accepts a valid multi-author linear repository and returns its replayed tree', () => {
+    const result = validateRepository(
+      repositoryOf(
+        [
+          ['a@x', 2],
+          ['b@x', 1],
+        ],
+        [
+          patch('a@x', 1, [], [createF]),
+          patch(
+            'a@x',
+            2,
+            [['a@x', 1]],
+            [{ type: 'text', path: 'f', edit: [{ retain: 1 }, { insert: ['two\n'] }] }],
+          ),
+          patch('b@x', 1, [['a@x', 2]], [{ type: 'put', path: 'bin', content: 'AAEC' }]),
+        ],
+      ),
+    );
+    assert.equal(decodeUtf8(result.tree.get('f')!), 'one\ntwo\n');
+    assert.deepEqual(result.tree.get('bin'), new Uint8Array([0, 1, 2]));
+  });
+
+  it('accepts the empty repository', () => {
+    validateRepository(repositoryOf([], []));
+  });
+});
+
+describe('validateRepository: §4.5 steps 2–4', () => {
+  it('rejects a repeated dot', () => {
+    assert.throws(
+      () =>
+        validateRepository(
+          repositoryOf(
+            [['a@x', 1]],
+            [
+              patch('a@x', 1, [], [createF]),
+              patch('a@x', 1, [], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+            ],
+          ),
+        ),
+      { message: 'duplicate dot: a@x->1' },
+    );
+  });
+
+  it('rejects patches out of (author, revision) order', () => {
+    assert.throws(
+      () =>
+        validateRepository(
+          repositoryOf(
+            [
+              ['a@x', 1],
+              ['b@x', 1],
+            ],
+            [
+              patch('b@x', 1, [['a@x', 1]], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+              patch('a@x', 1, [], [createF]),
+            ],
+          ),
+        ),
+      { message: 'repository.patches are not sorted by (author, revision)' },
+    );
+  });
+
+  it('rejects a revision that skips the base component', () => {
+    assert.throws(
+      () => validateRepository(repositoryOf([['a@x', 2]], [patch('a@x', 2, [], [createF])])),
+      { message: 'revision does not follow base: a@x->2' },
+    );
+  });
+
+  it('attributes a missing base dot to closure, not the frontier gap (tests/15 fixture)', () => {
+    // Frontier names a@x->2 and the only patch is a@x->2 based on the absent a@x->1: closure
+    // fires first, so the message names the missing base dot, never the frontier's phantom gap.
+    assert.throws(
+      () =>
+        validateRepository(repositoryOf([['a@x', 2]], [patch('a@x', 2, [['a@x', 1]], [createF])])),
+      { message: 'repository is missing a@x->1' },
+    );
+  });
+});
+
+describe('validateRepository: replay orchestration', () => {
+  it('attributes a two-dot cycle to replay, not the frontier gap (tests/15 fixture)', () => {
+    // Both patches pass order, revision, and closure checks; replay alone detects that neither
+    // is ever ready. The frontier gap (a@x->2 with no a@x->2 patch) must stay unreported.
+    assert.throws(
+      () =>
+        validateRepository(
+          repositoryOf(
+            [
+              ['a@x', 2],
+              ['b@x', 1],
+            ],
+            [
+              patch('a@x', 1, [['b@x', 1]], [{ type: 'put', path: 'f', content: 'YQ==' }]),
+              patch('b@x', 1, [['a@x', 1]], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+            ],
+          ),
+        ),
+      { message: 'cyclic or incomplete patch history' },
+    );
+  });
+
+  it('rejects a patch the frontier never reaches (tests/23 fixture)', () => {
+    // The patch integrates cleanly first; only the post-replay frontier match rejects it.
+    assert.throws(() => validateRepository(repositoryOf([], [patch('a@x', 1, [], [createF])])), {
+      message: 'unreachable patch: a@x->1',
+    });
+  });
+
+  it('rejects a frontier naming a revision no patch provides', () => {
+    assert.throws(
+      () => validateRepository(repositoryOf([['a@x', 2]], [patch('a@x', 1, [], [createF])])),
+      { message: 'repository is missing a@x->2' },
+    );
+  });
+
+  it('rejects concurrent-ready histories through replay', () => {
+    assert.throws(
+      () =>
+        validateRepository(
+          repositoryOf(
+            [
+              ['a@x', 1],
+              ['b@x', 1],
+            ],
+            [
+              patch('a@x', 1, [], [createF]),
+              patch('b@x', 1, [], [{ type: 'put', path: 'g', content: 'YQ==' }]),
+            ],
+          ),
+        ),
+      { message: 'concurrent replay is not implemented yet' },
+    );
+  });
+
+  it('surfaces step-5 change failures from inside the replay walk', () => {
+    assert.throws(
+      () =>
+        validateRepository(
+          repositoryOf([['a@x', 1]], [patch('a@x', 1, [], [{ type: 'delete', path: 'f' }])]),
+        ),
+      { message: 'delete of absent path: f' },
+    );
+  });
+});
