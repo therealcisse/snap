@@ -53,10 +53,10 @@ Toolchain per research `ts-toolchain-conventions` §7 (ESLint lane, TypeScript 6
 
 ## Text core
 
-- [ ] §4.4 tokenizer (LF-retaining); unit tests for `"a\r\nb"`, empty file, missing final LF.
-- [ ] Edit-script union with well-formedness validation, apply, coalesce (§4.4); unit tests for adjacent same-kind, under/over-consumption, empty insert.
-- [ ] §5 canonical diff: suffix-table DP, forward walk, delete-on-tie, prefix trim only; unit tests for the `a b a -> b a a` golden, the true tie case `a\nb\n -> b\na\n`, and the suffix-trim counterexample `[b] -> [a,b,b]`.
-- [ ] §6.3 inclusion transform; unit tests for every table row, the trailing-insert case, and an apply/transform oracle on random small inputs.
+- [x] §4.4 tokenizer (LF-retaining); unit tests for `"a\r\nb"`, empty file, missing final LF.
+- [x] Edit-script union with well-formedness validation, apply, coalesce (§4.4); unit tests for adjacent same-kind, under/over-consumption, empty insert.
+- [x] §5 canonical diff: suffix-table DP, forward walk, delete-on-tie, prefix trim only; unit tests for the `a b a -> b a a` golden, the true tie case `a\nb\n -> b\na\n`, and the suffix-trim counterexample `[b] -> [a,b,b]`.
+- [x] §6.3 inclusion transform; unit tests for every table row, the trailing-insert case, and an apply/transform oracle on random small inputs.
 
 ## Repository model and validation
 
