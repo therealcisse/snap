@@ -4,8 +4,9 @@
  * This is the only module in `src/` that writes to the process's standard streams. Commands are
  * pure — parsed arguments in, an output record out — so `run` is where an invocation becomes
  * writes and an exit status; `serve` is the one exception, a long-running command that prints
- * its own startup line. Writes are synchronous so the entire output is flushed before the
- * process ends, even when stdout is a pipe (SPEC §10).
+ * its own startup line. The record may take a moment to arrive — `merge`'s operand can be a §9
+ * URL — so `execute` returns a promise `run` awaits before emitting. Writes are synchronous so
+ * the entire output is flushed before the process ends, even when stdout is a pipe (SPEC §10).
  */
 import { writeSync } from 'node:fs';
 
@@ -14,12 +15,12 @@ import { setContributorId } from '../commands/config.ts';
 import { diffVersions, diffWorktree } from '../commands/diff.ts';
 import { init } from '../commands/init.ts';
 import { log } from '../commands/log.ts';
+import { merge } from '../commands/merge.ts';
 import { revert } from '../commands/revert.ts';
 import { serve } from '../commands/serve.ts';
 import { status } from '../commands/status.ts';
 import { showVersion } from '../commands/version.ts';
 import { SnapError, describeFailure } from '../core/errors.ts';
-import { findRepositoryRoot } from '../fs/locate.ts';
 
 import { type Command, parseArgs } from './args.ts';
 import { resolveModes } from './presentation.ts';
@@ -53,7 +54,7 @@ export async function run(argv: readonly string[], ctx: Context): Promise<number
     if (command.kind === 'serve') {
       return await serve(command.port, ctx.cwd, ctx.out.stdout);
     }
-    emit(execute(command, argv, ctx), ctx);
+    emit(await execute(command, argv, ctx), ctx);
     return 0;
   } catch (failure: unknown) {
     const { exitCode, line } = describeFailure(failure);
@@ -70,10 +71,14 @@ export function fdOutput(): Output {
   };
 }
 
-/** The commands that complete synchronously and speak in `CommandOutput`s; serve runs above. */
+/** The commands that speak in `CommandOutput`s; serve runs above. */
 type ImmediateCommand = Exclude<Command, { kind: 'serve' }>;
 
-function execute(command: ImmediateCommand, argv: readonly string[], ctx: Context): CommandOutput {
+async function execute(
+  command: ImmediateCommand,
+  argv: readonly string[],
+  ctx: Context,
+): Promise<CommandOutput> {
   switch (command.kind) {
     case 'showVersion':
       return showVersion();
@@ -103,10 +108,7 @@ function execute(command: ImmediateCommand, argv: readonly string[], ctx: Contex
     case 'revert':
       return revert(command.version, ctx.cwd, ctx.env);
     case 'merge':
-      // Still without a body, the repository is located first so running outside one reports
-      // the location failure the suites pin (tests/14), not `not implemented`.
-      findRepositoryRoot(ctx.cwd);
-      return notImplemented(argv);
+      return merge(command.repository, ctx.cwd);
   }
 }
 

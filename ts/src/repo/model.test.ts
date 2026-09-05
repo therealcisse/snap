@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { EMPTY_VERSION, parseVersion, versionKey } from '../core/version.ts';
+import { EMPTY_VERSION, parseVersion } from '../core/version.ts';
 
 import {
   EMPTY_REPOSITORY_JSON,
@@ -10,7 +10,7 @@ import {
   decodeRepository,
   encodePatch,
   encodeRepository,
-  knownVersionKeys,
+  isKnownVersion,
   resultVersion,
 } from './model.ts';
 
@@ -437,59 +437,45 @@ describe('resultVersion', () => {
   });
 });
 
-describe('knownVersionKeys (SPEC §4.2, §7.6)', () => {
-  it('knows only the empty version for an empty repository', () => {
-    assert.deepEqual(new Set(knownVersionKeys(repositoryOf())), new Set(['()']));
+describe('isKnownVersion (SPEC §1.1 invariant 4, §7.6, §7.8)', () => {
+  it('knows the empty version and each patch’s result version', () => {
+    const repository = repositoryOf(
+      authoredPatch('a@x', 1, []),
+      authoredPatch('a@x', 2, [['a@x', 1]]),
+    );
+    assert.ok(isKnownVersion(repository, EMPTY_VERSION));
+    assert.ok(isKnownVersion(repository, parseVersion('(a@x->1)')));
+    assert.ok(isKnownVersion(repository, parseVersion('(a@x->2)')));
   });
 
-  it('adds each patch’s result version', () => {
-    const keys = knownVersionKeys(
-      repositoryOf(authoredPatch('a@x', 1, []), authoredPatch('a@x', 2, [['a@x', 1]])),
+  it('knows a merged frontier that no single patch produces', () => {
+    // tests/21's shape: a@x and b@x both build on the shared a@x->1. The componentwise join
+    // names four present dots whose bases it contains, so `diff` may materialize it — even
+    // though it is the result version of no patch.
+    const repository = repositoryOf(
+      authoredPatch('a@x', 1, []),
+      authoredPatch('b@x', 1, [['a@x', 1]]),
+      authoredPatch('a@x', 2, [['a@x', 1]]),
+      authoredPatch('b@x', 2, [
+        ['a@x', 1],
+        ['b@x', 1],
+      ]),
     );
-    assert.deepEqual(keys, new Set(['()', '(a@x->1)', '(a@x->2)']));
+    assert.ok(isKnownVersion(repository, parseVersion('(a@x->2,b@x->2)')));
   });
 
-  it('sets the author component, replacing in place or inserting in canonical order', () => {
-    // Replacing the author's prior component (a@x) and inserting a new author (c@x) between
-    // a@x and d@x: both results must be sorted pair arrays, which versionKey requires.
-    const replaced = knownVersionKeys(
-      repositoryOf(
-        authoredPatch('a@x', 2, [
-          ['a@x', 1],
-          ['b@x', 2],
-        ]),
-      ),
-    );
-    assert.ok(replaced.has('(a@x->2,b@x->2)'));
-    assert.ok(!replaced.has('(a@x->1,b@x->2)'));
-
-    const inserted = knownVersionKeys(
-      repositoryOf(
-        authoredPatch('c@x', 1, [
-          ['a@x', 1],
-          ['d@x', 1],
-        ]),
-      ),
-    );
-    assert.ok(inserted.has('(a@x->1,c@x->1,d@x->1)'));
+  it('rejects a revision no patch provides', () => {
+    const repository = repositoryOf(authoredPatch('a@x', 1, []));
+    assert.ok(!isKnownVersion(repository, parseVersion('(a@x->2)')));
   });
 
-  it('keys in versionKey form, matching freshly parsed versions', () => {
-    const repository = decodeRepository(
-      JSON.stringify({
-        format: 1,
-        frontier: [],
-        patches: [
-          {
-            author: 'a@x',
-            revision: 1,
-            base: [],
-            message: 'm',
-            changes: [{ type: 'delete', path: 'f' }],
-          },
-        ],
-      }),
+  it('rejects a version that keeps a patch but drops its base dot', () => {
+    // (b@x->1) selects b@x->1, whose base names the a@x->1 the version drops: the selection
+    // cannot replay, so `diff` and `revert` must refuse it.
+    const repository = repositoryOf(
+      authoredPatch('a@x', 1, []),
+      authoredPatch('b@x', 1, [['a@x', 1]]),
     );
-    assert.ok(knownVersionKeys(repository).has(versionKey(parseVersion('(a@x->1)'))));
+    assert.ok(!isKnownVersion(repository, parseVersion('(b@x->1)')));
   });
 });

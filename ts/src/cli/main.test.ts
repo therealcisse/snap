@@ -96,17 +96,31 @@ describe('run', () => {
     assert.equal(h.stderr(), 'snap: invalid version: (a@x->01)\n');
   });
 
-  it('keeps the cross-repository diff and merge not implemented', async () => {
+  it('keeps the cross-repository diff not implemented', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
     emptyRepository(cwd);
     const h = harness({ cwd });
     assert.equal(await run(['diff', '()', '()', '--repo', 'other'], h.ctx), 1);
+    assert.equal(h.stderr(), 'snap: not implemented: diff () () --repo other\n');
+  });
+
+  it('runs merge through the dispatch and reports the joined frontier', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
+    emptyRepository(cwd);
+    const remote = mkdtempSync(join(tmpdir(), 'snap-cli-'));
+    emptyRepository(remote);
+    const h = harness({ cwd });
+    assert.equal(await run(['merge', remote], h.ctx), 0);
+    assert.equal(h.stdout(), '()\n');
+    assert.equal(h.stderr(), '');
+  });
+
+  it('reports a merge operand that is not a repository root', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'snap-cli-'));
+    emptyRepository(cwd);
+    const h = harness({ cwd });
     assert.equal(await run(['merge', 'other'], h.ctx), 1);
-    // The harness accumulates, so one assertion carries both refusals in order.
-    assert.equal(
-      h.stderr(),
-      'snap: not implemented: diff () () --repo other\n' + 'snap: not implemented: merge other\n',
-    );
+    assert.equal(h.stderr(), 'snap: not a Snap repository\n');
   });
 
   it('initializes a repository through the dispatch', async () => {

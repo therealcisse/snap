@@ -70,15 +70,16 @@ export interface LoadedRepository {
 }
 
 /**
- * Locates, decodes, and validates the nearest repository's `repository.json` (SPEC §4.5).
+ * Decodes and validates the `repository.json` of exactly `root` — no nearest-walk (SPEC §4.5).
  *
- * Throws `not a Snap repository` when there is no enclosing repository or the found root's
- * `repository.json` cannot be read, the decoder's `SnapError` when the file is malformed, and
- * the validator's `SnapError` when the history is invalid — before any command mutates
- * anything, because every repository command owes its checks first (§7.6, §10).
+ * The remote operand of `merge` (SPEC §7.8) must itself be a repository root, so unlike
+ * `loadValidatedRepository` there is no walk: a directory that merely lies inside some enclosing
+ * repository does not qualify. Throws `not a Snap repository` when `root`'s `repository.json`
+ * cannot be read, the decoder's `SnapError` when the file is malformed, and the validator's
+ * `SnapError` when the history is invalid — before any command mutates anything, because every
+ * repository command owes its checks first (§7.6, §10).
  */
-export function loadValidatedRepository(startDir: string): LoadedRepository {
-  const root = findRepositoryRoot(startDir);
+export function loadRepositoryAtRoot(root: string): LoadedRepository {
   let text: string;
   try {
     text = readFileSync(join(root, SNAP_DIRECTORY, REPOSITORY_FILE), 'utf8');
@@ -89,6 +90,18 @@ export function loadValidatedRepository(startDir: string): LoadedRepository {
   }
   const repository = decodeRepository(text);
   return { root, repository, replay: validateRepository(repository) };
+}
+
+/**
+ * Locates, decodes, and validates the nearest repository's `repository.json` (SPEC §4.5): the
+ * nearest enclosing root, then `loadRepositoryAtRoot` on it.
+ *
+ * Throws `not a Snap repository` when there is no enclosing repository or the found root's
+ * `repository.json` cannot be read, the decoder's `SnapError` when the file is malformed, and
+ * the validator's `SnapError` when the history is invalid.
+ */
+export function loadValidatedRepository(startDir: string): LoadedRepository {
+  return loadRepositoryAtRoot(findRepositoryRoot(startDir));
 }
 
 /**
